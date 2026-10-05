@@ -86,11 +86,15 @@ extension DockSplitStore {
                 movement: .right
             )
         case .newTerminalToRight:
-            createDockContextSurfaceToRight(
-                kind: .terminal,
-                anchorTabId: tab.id,
-                paneId: pane
-            )
+            if NewEditorTabContextMenuItem.shared.consumeRequest() {
+                openNewEditorTabs(inPane: pane, toRightOf: tab.id)
+            } else {
+                createDockContextSurfaceToRight(
+                    kind: .terminal,
+                    anchorTabId: tab.id,
+                    paneId: pane
+                )
+            }
         case .newBrowserToRight:
             createDockContextSurfaceToRight(
                 kind: .browser,

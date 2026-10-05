@@ -38,6 +38,7 @@ import CmuxFoundation
 import CmuxSentryReporting
 import CmuxSidebar
 import CmuxGit
+import WheelhouseCodeEditor
 import os
 
 private nonisolated let sudoApprovalLogger = Logger(
@@ -1959,6 +1960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         installWindowResponderSwizzles()
         installBrowserAddressBarFocusObservers()
         installShortcutMonitor()
+        NewEditorTabContextMenuItem.shared.install()
         installShortcutDefaultsObserver()
         if !isRunningUnderXCTest {
             GlobalSearchCoordinator.shared.start()
@@ -14774,6 +14776,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
 
+        // Wheelhouse: the focused code editor handles its own shortcuts.
+        if CodeEditorShortcuts.claims(
+            characters: KeyboardLayout.normalizedCharacters(for: event),
+            modifierFlags: event.modifierFlags
+        ), CodeEditorShortcuts.isEditorFocused(
+            firstResponder: (resolvedShortcutEventWindow(event) ?? shortcutRoutingActiveWindow)?.firstResponder
+        ) {
+            clearConfiguredShortcutChordState()
+            return false
+        }
+
         // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys.
         // Treat nil as "" and rely on keyCode/layout-aware fallback logic where needed.
         // When a non-Latin input source is active (Korean, Chinese, Japanese, etc.),
@@ -17995,6 +18008,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 if workspace != nil { onExecuted?() }
                 return workspace != nil
             case .newSimulator: return performConfiguredNewSimulatorAction(context: context, onExecuted: onExecuted)
+            case .newEditor:
+                guard let workspace = context.tabManager.selectedWorkspace,
+                      let pane = workspace.bonsplitController.focusedPaneId,
+                      workspace.openNewEditorTabs(inPane: pane) else { return false }
+                onExecuted?()
+                return true
             case .newTerminal:
                 context.tabManager.newSurface()
                 onExecuted?()

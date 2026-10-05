@@ -23,6 +23,14 @@ reload when the file changes on disk, and session restore all work as before.
 - Syntax highlighting for about 80 languages, loaded on demand.
 - Monaco's editing features: multiple cursors, find and replace, folding, minimap, bracket matching.
 - Save with ⌘S or the panel's save button.
+- While the editor has keyboard focus, ⌘F (find in file), ⌘D (add the next occurrence to the
+  selection) and ⌘/ (toggle line comment) go to the editor. Everywhere else they keep their cmux
+  meaning, for example ⌘D splits the pane.
+- A new-editor-tab button (curly braces) sits next to the new-terminal and new-browser buttons at
+  the top right of every pane. It asks for one or more files and opens each as a tab; a file that
+  is already open is focused instead. A tab's right-click menu has the same thing as
+  "New Editor Tab to Right". The button is the built-in action `wheelhouse.newEditor`, so it can be
+  placed or removed like any other tab bar button in `cmux.json`.
 - Follows the panel's light or dark colors and the existing `fileEditor.*` settings (word wrap,
   line numbers, indent guides, current-line highlight, tab width).
 
@@ -31,7 +39,7 @@ Not there yet:
 - Language features (completion, go to definition, diagnostics). These come with LSP support.
 - Remote files are read-only, as in cmux.
 - Markdown source editing still uses the native editor.
-- Where an app shortcut and an editor shortcut overlap, the app shortcut wins.
+- Other editor shortcuts that overlap an app shortcut still go to the app.
 
 To go back to the native editor:
 
@@ -151,6 +159,15 @@ The build also sets a few preferences (`wheelhouse/defaults.sh`) that hide cmux'
 control, its Pro upgrade prompts, the phone pairing button and the red dev-build label. They are
 ordinary cmux switches, so they can be turned back on from the app's debug menu.
 
+### Nothing reported to cmux
+
+`wheelhouse/defaults.sh` also turns off "Send anonymous telemetry". In cmux that setting stops
+usage analytics and crash reports but still asks cmux's feature-flag service for flag values every
+30 minutes. In this fork it stops that request too: with telemetry off, flags use their built-in
+defaults and local overrides. A fork has no business in cmux's analytics or crash reports, and its
+bundle id still starts with cmux's, so cmux's own check for foreign builds would not have caught
+it. Turn the setting back on in Settings to get upstream's behavior.
+
 ### Naming
 
 The app is named Wheelhouse IDE, and its menus, dialogs and settings say Wheelhouse IDE where
@@ -174,6 +191,7 @@ run it after changing the SVG, then rebuild. The release, nightly and RC icon se
 | --- | --- |
 | `Packages/macOS/WheelhouseCodeEditor` | Swift package: the web view host, a private URL scheme that serves the bundled editor, the bridge to the page, unit tests |
 | `Sources/Panels/FilePreviewCodeEditor.swift` | Adapter between the file panel and the editor |
+| `Sources/Panels/FilePreviewNewEditorTab.swift` | The new-editor-tab action: file chooser, opening the tabs, the right-click menu item |
 | `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page |
 | `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
@@ -198,7 +216,10 @@ errors and failed asset loads are logged under the `wheelhouse.code-editor` subs
 ## Staying close to upstream
 
 cmux moves quickly, so the fork keeps its changes small: new code goes in its own package and
-files, and upstream files are touched only where the editor hooks in. `upstream` is
+files, and upstream files are touched only where the editor hooks in (the file panel, the app's
+key monitor, the built-in tab bar actions) and for the one-line telemetry rule in
+`Sources/FeatureFlags.swift`. The tab right-click menu is built by the Bonsplit submodule, which
+this fork does not modify: the editor item is added to that menu when it opens. `upstream` is
 `manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
 files most likely to conflict; keep this README, regenerate the bundle after a merge, and rerun
 `wheelhouse/brand/icon/generate.sh` if upstream changes its icons.
