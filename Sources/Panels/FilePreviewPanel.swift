@@ -1364,6 +1364,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         remotePreviewRefresh = nil
         cloudPreviewProviderIdentity = nil
         isClosed = true
+        discardUntitledFileIfClosedByUser()
         unbindTabMetadata()
         stopWatchingForFileChanges()
         textLoadCoordinator.cancel()
@@ -1644,6 +1645,10 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         guard previewMode == .text else { return nil }
         guard !isSaving else { return nil }
         let currentContent = textView?.string ?? textContent
+        if isUntitled {
+            saveUntitledContent(currentContent)
+            return nil
+        }
         guard currentContent != originalTextContent else {
             _ = replaceTextContentIfChanged(currentContent)
             setTabMetadataDirtyState(false)

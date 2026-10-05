@@ -4,7 +4,10 @@ export type CodeEditorHostMessage =
   | { type: "options"; options: CodeEditorOptions }
   | { type: "theme"; theme: CodeEditorTheme }
   | { type: "focus" }
-  | { type: "requestSave" };
+  | { type: "requestSave" }
+  | { type: "reveal"; line: number; column: number }
+  | { type: "lspState"; server: string; state: "open" | "closed" | "unavailable" }
+  | { type: "lsp"; server: string; message: unknown };
 
 export type CodeEditorOptions = {
   wordWrap: boolean;
@@ -26,7 +29,10 @@ export type CodeEditorTheme = {
 export type CodeEditorWebMessage =
   | { type: "ready" }
   | { type: "change"; content: string; sequence: number }
-  | { type: "save"; content: string; sequence: number };
+  | { type: "save"; content: string; sequence: number }
+  | { type: "openFile"; path: string; line: number; column: number }
+  | { type: "lspStart"; server: string }
+  | { type: "lsp"; server: string; json: string };
 
 type NativeMessageHandler = { postMessage(message: CodeEditorWebMessage): void };
 

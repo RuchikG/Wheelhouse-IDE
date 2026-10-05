@@ -50,6 +50,9 @@ struct FilePreviewCodeEditor: View {
                     panel?.saveTextContent()
                 },
                 onPointerDown: onRequestPanelFocus,
+                onOpenFile: { [weak panel] path in
+                    panel?.openFileInSamePane(path)
+                },
                 onAttach: { [weak panel] root, responder in
                     panel?.attachPreviewFocus(root: root, primaryResponder: responder, intent: .textEditor)
                 }

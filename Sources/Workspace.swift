@@ -15030,7 +15030,9 @@ extension Workspace: BonsplitDelegate {
             case .newSimulator:
                 _ = newSimulatorSurface(inPane: pane, focus: true)
             case .newEditor:
-                openNewEditorTabs(inPane: pane)
+                if let kind = NewEditorTabPanel.chooseKind() {
+                    openNewEditorTabs(kind, inPane: pane)
+                }
             case .copyWorkingDirectory, .copyProjectRoot, .copyScreen:
                 if let copyAction = builtInAction.terminalCopyAction {
                     // Target the tab selected in the pane whose button was
@@ -15200,8 +15202,8 @@ extension Workspace: BonsplitDelegate {
             guard let panelId = panelIdFromSurfaceId(tab.id) else { return }
             _ = moveSurface(panelId: panelId, to: .right)
         case .newTerminalToRight:
-            if NewEditorTabContextMenuItem.shared.consumeRequest() {
-                openNewEditorTabs(inPane: pane, toRightOf: tab.id)
+            if let kind = NewEditorTabContextMenuItem.shared.consumeRequest() {
+                openNewEditorTabs(kind, inPane: pane, toRightOf: tab.id)
             } else {
                 createTerminalToRight(of: tab.id, inPane: pane)
             }

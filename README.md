@@ -27,16 +27,38 @@ reload when the file changes on disk, and session restore all work as before.
   selection) and ⌘/ (toggle line comment) go to the editor. Everywhere else they keep their cmux
   meaning, for example ⌘D splits the pane.
 - A new-editor-tab button (curly braces) sits next to the new-terminal and new-browser buttons at
-  the top right of every pane. It asks for one or more files and opens each as a tab; a file that
-  is already open is focused instead. A tab's right-click menu has the same thing as
-  "New Editor Tab to Right". The button is the built-in action `wheelhouse.newEditor`, so it can be
-  placed or removed like any other tab bar button in `cmux.json`.
+  the top right of every pane. It offers "New Untitled File" and "Open File…"; a file that is
+  already open is focused instead of opened twice. A tab's right-click menu has the same two
+  choices under "New Editor Tab to Right". The button is the built-in action
+  `wheelhouse.newEditor`, so it can be placed or removed like any other tab bar button in
+  `cmux.json`.
+- An untitled file asks where to save the first time you save it, and the tab then becomes that
+  file. Its text is not kept if the app quits before that.
 - Follows the panel's light or dark colors and the existing `fileEditor.*` settings (word wrap,
   line numbers, indent guides, current-line highlight, tab width).
 
+#### Language servers
+
+Go files get completion, hover, go to definition, find references, rename, formatting and
+diagnostics from [gopls](https://go.dev/gopls/), when `gopls` is installed (`go install
+golang.org/x/tools/gopls@latest`). The app looks for it on your login shell's `PATH`. Each editor
+runs `gopls -remote=auto`, a thin client of one shared gopls daemon, so open files of the same
+module share one loaded workspace. The project root is the nearest `go.work`, else `go.mod`, above
+the file. A jump to another file opens that file as a tab in the same pane.
+
+Other servers that speak LSP over standard input and output can be added, by file extension:
+
+```sh
+defaults write <bundle id> wheelhouse.languageServers -dict-add rs \
+  '{ command = ("rust-analyzer"); rootMarkers = ("Cargo.toml"); }'
+```
+
+An entry with an empty `command` turns a built-in server off. Server start-up and failures are
+logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
+
 Not there yet:
 
-- Language features (completion, go to definition, diagnostics). These come with LSP support.
+- If a language server exits, its features stay off in that tab until the tab is reopened.
 - Remote files are read-only, as in cmux.
 - Markdown source editing still uses the native editor.
 - Other editor shortcuts that overlap an app shortcut still go to the app.

@@ -15,12 +15,16 @@ public struct CodeEditorView: NSViewRepresentable {
     private let onContentChange: @MainActor (String) -> Void
     private let onSave: @MainActor (String) -> Void
     private let onPointerDown: @MainActor () -> Void
+    private let onOpenFile: @MainActor (String) -> Void
     private let onAttach: @MainActor (_ root: NSView, _ responder: NSView) -> Void
 
     /// - Parameters:
     ///   - assetDirectory: Directory holding `code-editor.html` and its bundle.
     ///   - onContentChange: The edited content, shortly after typing pauses.
     ///   - onSave: The current content when the user asks to save.
+    ///   - onOpenFile: Another file the editor wants shown, for example the
+    ///     target of go to definition. Its position is revealed by the editor
+    ///     that ends up showing the file.
     ///   - onAttach: The container and the view that takes keyboard focus,
     ///     reported whenever the editor is (re)attached.
     public init(
@@ -32,6 +36,7 @@ public struct CodeEditorView: NSViewRepresentable {
         onContentChange: @escaping @MainActor (String) -> Void,
         onSave: @escaping @MainActor (String) -> Void,
         onPointerDown: @escaping @MainActor () -> Void = {},
+        onOpenFile: @escaping @MainActor (String) -> Void = { _ in },
         onAttach: @escaping @MainActor (_ root: NSView, _ responder: NSView) -> Void = { _, _ in }
     ) {
         self.assetDirectory = assetDirectory
@@ -42,6 +47,7 @@ public struct CodeEditorView: NSViewRepresentable {
         self.onContentChange = onContentChange
         self.onSave = onSave
         self.onPointerDown = onPointerDown
+        self.onOpenFile = onOpenFile
         self.onAttach = onAttach
     }
 
@@ -68,6 +74,7 @@ public struct CodeEditorView: NSViewRepresentable {
         coordinator.onContentChange = onContentChange
         coordinator.onSave = onSave
         coordinator.onPointerDown = onPointerDown
+        coordinator.onOpenFile = onOpenFile
         let webView = coordinator.ensureWebView(assetDirectory: assetDirectory)
         host.attach(webView)
         host.isHidden = !isVisible

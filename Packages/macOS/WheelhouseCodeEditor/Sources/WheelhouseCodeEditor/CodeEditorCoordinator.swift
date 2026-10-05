@@ -42,6 +42,18 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     var onContentChange: (@MainActor (String) -> Void)?
     var onSave: (@MainActor (String) -> Void)?
     var onPointerDown: (@MainActor () -> Void)?
+    var onOpenFile: (@MainActor (String) -> Void)?
+
+    /// Running language servers by file extension.
+    private var languageServers: [String: LanguageServerProcess] = [:]
+    private var languageServerRoots: [String: String] = [:]
+    private var startingLanguageServers = Set<String>()
+    /// Bumped when the page restarts, so work started for the old page is dropped.
+    private var pageGeneration = 0
+
+    private static let liveCoordinators = NSHashTable<CodeEditorCoordinator>.weakObjects()
+    /// Positions to show once the editor for a path has its document.
+    private static var pendingReveals: [String: (line: Int, column: Int)] = [:]
 
     func ensureWebView(assetDirectory: URL) -> CodeEditorWebView {
         if let webView { return webView }
@@ -68,6 +80,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         webView.onPointerDown = { [weak self] in self?.onPointerDown?() }
         webView.onBecomeFirstResponder = { [weak self] in self?.send(["type": "focus"]) }
         self.webView = webView
+        Self.liveCoordinators.add(self)
         webView.load(URLRequest(url: CodeEditorAssetSchemeHandler.pageURL))
         return webView
     }
@@ -87,6 +100,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         webView.removeFromSuperview()
         self.webView = nil
         isReady = false
+        stopLanguageServers()
+        Self.liveCoordinators.remove(self)
     }
 
     private func flush() {
@@ -108,6 +123,27 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 "readOnly": document.isReadOnly,
             ])
         }
+        if let document, let position = Self.pendingReveals.removeValue(forKey: Self.revealKey(document.path)) {
+            send(["type": "reveal", "line": position.line, "column": position.column])
+        }
+    }
+
+    /// Shows a position in the editor for `path`: now when that editor is
+    /// loaded, otherwise as soon as one opens the file.
+    static func reveal(path: String, line: Int, column: Int) {
+        let key = revealKey(path)
+        let loaded = liveCoordinators.allObjects.first { coordinator in
+            coordinator.isReady && coordinator.document.map { revealKey($0.path) } == key
+        }
+        if let loaded {
+            loaded.send(["type": "reveal", "line": line, "column": column])
+        } else {
+            pendingReveals[key] = (line, column)
+        }
+    }
+
+    private static func revealKey(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 
     private func send(_ message: [String: Any]) {
@@ -132,6 +168,107 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         sentOptions = nil
         sentTheme = nil
         sync.reset()
+        stopLanguageServers()
+    }
+
+    // MARK: Language servers
+
+    private func stopLanguageServers() {
+        pageGeneration += 1
+        languageServers.values.forEach { $0.stop() }
+        languageServers.removeAll()
+        languageServerRoots.removeAll()
+        startingLanguageServers.removeAll()
+    }
+
+    private func sendLanguageServerState(_ server: String, _ state: String) {
+        send(["type": "lspState", "server": server, "state": state])
+    }
+
+    /// Starts the server for files with extension `server`, as asked by the page.
+    private func startLanguageServer(_ server: String) {
+        guard languageServers[server] == nil, !startingLanguageServers.contains(server) else { return }
+        guard let path = document?.path,
+              let definition = LanguageServerRegistry.definition(
+                  forFileExtension: server,
+                  overrides: UserDefaults.standard.dictionary(forKey: LanguageServerRegistry.defaultsKey)
+              ) else {
+            sendLanguageServerState(server, "unavailable")
+            return
+        }
+        startingLanguageServers.insert(server)
+        let generation = pageGeneration
+        Task { [weak self] in
+            let searchPath = await LanguageServerEnvironment.shared.searchPath()
+            guard let self, self.pageGeneration == generation else { return }
+            self.startingLanguageServers.remove(server)
+            guard let executable = LanguageServerEnvironment.executable(named: definition.command[0], searchPath: searchPath) else {
+                CodeEditorLog.languageServer.notice("no \(definition.command[0], privacy: .public) on PATH; language features are off")
+                self.sendLanguageServerState(server, "unavailable")
+                return
+            }
+            let root = LanguageServerRegistry.rootDirectory(forFile: path, markers: definition.rootMarkers)
+            var environment = ProcessInfo.processInfo.environment
+            environment["PATH"] = searchPath
+            let process = LanguageServerProcess(
+                executable: executable,
+                arguments: Array(definition.command.dropFirst()),
+                environment: environment,
+                directory: URL(fileURLWithPath: root, isDirectory: true),
+                onMessage: { [weak self] body in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self?.deliver(body, from: server, generation: generation) }
+                    }
+                },
+                onExit: { [weak self] in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self?.languageServerDidExit(server, generation: generation) }
+                    }
+                }
+            )
+            do {
+                try process.start()
+            } catch {
+                CodeEditorLog.languageServer.error("could not start \(executable.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                self.sendLanguageServerState(server, "unavailable")
+                return
+            }
+            CodeEditorLog.languageServer.notice("started \(executable.lastPathComponent, privacy: .public) for \(root, privacy: .public)")
+            self.languageServers[server] = process
+            self.languageServerRoots[server] = root
+            self.sendLanguageServerState(server, "open")
+        }
+    }
+
+    private func forwardToLanguageServer(_ server: String, _ message: [String: Any]) {
+        guard let process = languageServers[server], let root = languageServerRoots[server] else { return }
+        let completed = LanguageServerRegistry.completingInitialize(
+            message, rootDirectory: root, processIdentifier: ProcessInfo.processInfo.processIdentifier
+        )
+        guard let body = try? JSONSerialization.data(withJSONObject: completed) else { return }
+        process.send(body)
+    }
+
+    private func deliver(_ body: Data, from server: String, generation: Int) {
+        guard generation == pageGeneration, isReady, let webView,
+              let json = String(data: body, encoding: .utf8),
+              let serverName = try? JSONSerialization.data(withJSONObject: [server]),
+              let serverJSON = String(data: serverName, encoding: .utf8) else { return }
+        // The body is already JSON text; passing it through avoids a decode and encode per message.
+        webView.evaluateJavaScript(
+            "window.cmuxCodeEditor?.receive({type:\"lsp\",server:\(serverJSON)[0],message:\(json)});"
+        ) { _, error in
+            if let error {
+                CodeEditorLog.languageServer.error("message to page failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func languageServerDidExit(_ server: String, generation: Int) {
+        guard generation == pageGeneration, languageServers.removeValue(forKey: server) != nil else { return }
+        languageServerRoots.removeValue(forKey: server)
+        CodeEditorLog.languageServer.notice("language server for .\(server, privacy: .public) exited")
+        sendLanguageServerState(server, "closed")
     }
 
     // MARK: WKScriptMessageHandler
@@ -158,6 +295,19 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             } else {
                 onContentChange?(content)
             }
+        case "lspStart":
+            if let server = body["server"] as? String {
+                startLanguageServer(server.lowercased())
+            }
+        case "lsp":
+            if let server = body["server"] as? String, let json = body["json"] as? String,
+               let message = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
+                forwardToLanguageServer(server, message)
+            }
+        case "openFile":
+            guard let path = body["path"] as? String, path.hasPrefix("/") else { return }
+            Self.reveal(path: path, line: body["line"] as? Int ?? 1, column: body["column"] as? Int ?? 1)
+            onOpenFile?(path)
         default:
             break
         }

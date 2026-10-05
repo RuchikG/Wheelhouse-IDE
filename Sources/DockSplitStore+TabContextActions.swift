@@ -86,8 +86,8 @@ extension DockSplitStore {
                 movement: .right
             )
         case .newTerminalToRight:
-            if NewEditorTabContextMenuItem.shared.consumeRequest() {
-                openNewEditorTabs(inPane: pane, toRightOf: tab.id)
+            if let kind = NewEditorTabContextMenuItem.shared.consumeRequest() {
+                openNewEditorTabs(kind, inPane: pane, toRightOf: tab.id)
             } else {
                 createDockContextSurfaceToRight(
                     kind: .terminal,

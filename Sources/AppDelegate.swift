@@ -18011,7 +18011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             case .newEditor:
                 guard let workspace = context.tabManager.selectedWorkspace,
                       let pane = workspace.bonsplitController.focusedPaneId,
-                      workspace.openNewEditorTabs(inPane: pane) else { return false }
+                      workspace.openNewEditorTabs(.untitled, inPane: pane) else { return false }
                 onExecuted?()
                 return true
             case .newTerminal:

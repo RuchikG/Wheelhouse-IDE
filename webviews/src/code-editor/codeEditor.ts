@@ -5,6 +5,7 @@ import {
   type CodeEditorOptions,
   type CodeEditorTheme,
 } from "./bridge";
+import { LanguageClients } from "./languageClient";
 
 const THEME_NAME = "cmux-host";
 const CHANGE_DEBOUNCE_MS = 120;
@@ -24,6 +25,7 @@ const editorWorkerURL = new URL(/* @vite-ignore */ "./monaco-editor-worker.mjs",
  */
 export class CodeEditor {
   private readonly editor: monaco.editor.IStandaloneCodeEditor;
+  private readonly languageClients = new LanguageClients();
   private documentSequence = 0;
   private applyingHostDocument = false;
   private pendingChange: ReturnType<typeof setTimeout> | undefined;
@@ -43,6 +45,25 @@ export class CodeEditor {
       }
     });
     this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.save());
+    // A jump to another file (go to definition, a reference) is the host's to show.
+    monaco.editor.registerEditorOpener({
+      openCodeEditor: (_source, resource, selectionOrPosition) => {
+        if (resource.scheme !== "file") {
+          return false;
+        }
+        let line = 1;
+        let column = 1;
+        if (selectionOrPosition && "lineNumber" in selectionOrPosition) {
+          line = selectionOrPosition.lineNumber;
+          column = selectionOrPosition.column;
+        } else if (selectionOrPosition) {
+          line = selectionOrPosition.startLineNumber;
+          column = selectionOrPosition.startColumn;
+        }
+        postToHost({ type: "openFile", path: resource.fsPath, line, column });
+        return true;
+      },
+    });
   }
 
   receive(message: CodeEditorHostMessage): void {
@@ -61,6 +82,19 @@ export class CodeEditor {
         break;
       case "requestSave":
         this.save();
+        break;
+      case "reveal": {
+        const position = { lineNumber: message.line, column: message.column };
+        this.editor.setPosition(position);
+        this.editor.revealPositionInCenter(position);
+        this.editor.focus();
+        break;
+      }
+      case "lspState":
+        this.languageClients.receiveState(message.server, message.state);
+        break;
+      case "lsp":
+        this.languageClients.receiveMessage(message.server, message.message);
         break;
     }
   }
@@ -92,6 +126,7 @@ export class CodeEditor {
       }
       this.editor.setModel(model);
       current?.dispose();
+      this.languageClients.ensureFor(path);
     } finally {
       this.applyingHostDocument = false;
     }
