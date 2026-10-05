@@ -1,8 +1,9 @@
 # Wheelhouse
 
 Wheelhouse is a fork of [cmux](https://github.com/manaflow-ai/cmux), the Ghostty-based macOS
-terminal for AI coding agents. It adds a built-in code editor, with the goal of running a whole
-project from one window: terminals, agents, browser tabs and code.
+terminal for AI coding agents. The goal is to run every project you have in flight from one
+window: a board of projects, and for each project a workspace with its terminals, agents, browser
+tabs and code. It adds two things to cmux: a project board and a built-in code editor.
 
 This is an early personal fork. It is not affiliated with or supported by Manaflow, and there are
 no packaged releases; you build it from source. Everything cmux does (workspaces, splits,
@@ -39,6 +40,63 @@ defaults write <bundle id> wheelhouse.codeEditor.enabled -bool false
 
 The bundle id of a tagged dev build is `com.cmuxterm.app.debug.<tag>`.
 
+### Project board
+
+A kanban board of projects in the left sidebar, replacing the flat workspace list.
+
+```
+Projects
+DESIGN            1
+  ● Checkout redesign
+    Tech design in review
+DEV               2
+  ● Search indexing        2 waiting on you
+    feat/reindex* · #482 · 3 agents
+  ● Billing export         remote
+    feat/export · 60%
+REVIEW & TEST     —
+RELEASE           1
+  ● Mobile login
+    Rollout 50% → 100% Wednesday
+DONE              —
+```
+
+How it maps onto cmux:
+
+| Board | cmux |
+| --- | --- |
+| Project (a card) | A workspace: its directory, terminals, agents and browser tabs |
+| Lane | A workspace group. Moving a card moves the workspace between groups |
+| Card details | The workspace's description, git branch and pull request, agents and their status, unread notifications, progress |
+| The board itself | A [custom sidebar](docs/custom-sidebars.md) script |
+
+Design:
+
+- **Five lanes:** Design, Dev, Review & Test, Release, Done. A project moves left to right over
+  its life; lanes are set by hand.
+- **A card shows what needs you.** Status dot, one-line summary, branch (with a dirty marker) and
+  pull request, how many agents are running and how many are waiting on you, unread count, a
+  badge for projects on a remote host, and a progress bar.
+- **Waiting-on-you first.** Within a lane, projects with an agent waiting for input sort to the
+  top, then projects with unread notifications.
+- **Click to jump.** Clicking a card selects the project's workspace, and goes straight to the
+  agent that is waiting if there is one. Right-click moves the card to another lane or marks it
+  read.
+- **The board only reads state and jumps.** Work happens in the project's workspace: in its
+  terminals and agents, in the real web tools opened as browser tabs, and in the editor. Nothing
+  is re-implemented on the board.
+- **Workspaces that are not projects** are listed under "Not on the board" and can be added to a
+  lane from there.
+- **A project is one small file:** name, lane, summary, repositories with their branch, links to
+  open as tabs, and agents to start. Opening a project creates its workspace in the right lane,
+  opens the links, starts the agents, and gives it its own git worktree per repository, so two
+  projects on the same repository never share a checkout.
+- **Remote projects** are ordinary cmux SSH workspaces; the card carries a badge.
+
+The board is built on cmux's own extension points (custom sidebars, workspace groups and the
+CLI), so it needs no changes to the app. The sidebar script and the small CLI that creates
+lanes and opens projects are a working prototype kept outside this repository for now.
+
 ### Roadmap
 
 | Step | State |
@@ -46,7 +104,8 @@ The bundle id of a tagged dev build is `com.cmuxterm.app.debug.<tag>`.
 | Editor in the file panel | Done |
 | LSP: completion, definitions, hover, diagnostics (gopls first) | Next |
 | Remote workspaces: edit and save files over SSH, language server on the remote host | Planned |
-| Project board: a sidebar of projects in lanes (Design, Dev, Review & Test, Release, Done) | Prototype outside this repository, built on cmux's custom sidebars |
+| Project board | Working prototype, outside this repository |
+| Board: drag cards between lanes; status from external tools (issue tracker, CI) on the card | Planned |
 
 ## Build
 
