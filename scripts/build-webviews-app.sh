@@ -31,6 +31,24 @@ write_agent_session_html() {
   } > "$out_dir/agent-session.html"
 }
 
+write_code_editor_html() {
+  out_dir="$1"
+  {
+    printf '<!doctype html>\n'
+    printf '<html lang="en" data-cmux-webview-kind="code-editor">\n'
+    printf '  <head>\n'
+    printf '    <meta charset="UTF-8" />\n'
+    printf '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n'
+    printf '    <title>cmux Code Editor</title>\n'
+    printf '  </head>\n'
+    printf '  <body>\n'
+    printf '    <main id="root"></main>\n'
+    printf '    <script type="module" src="./main.mjs"></script>\n'
+    printf '  </body>\n'
+    printf '</html>\n'
+  } > "$out_dir/code-editor.html"
+}
+
 strip_trailing_line_whitespace() {
   /usr/bin/perl -0pi -e 's/[ \t]+(?=\r?\n)//g; s/[ \t]+\z//' "$@"
 }
@@ -48,6 +66,7 @@ if [ "${1:-}" = "--check" ]; then
     bun install --frozen-lockfile
     CMUX_WEBVIEWS_OUT_DIR="$tmp_dir" bun run build
     write_agent_session_html "$tmp_dir"
+    write_code_editor_html "$tmp_dir"
     normalize_webviews_output "$tmp_dir"
   )
   diff_output="$(mktemp)"
@@ -75,4 +94,5 @@ fi
   bun run build
 )
 write_agent_session_html "$OUT_DIR"
+write_code_editor_html "$OUT_DIR"
 normalize_webviews_output "$OUT_DIR"

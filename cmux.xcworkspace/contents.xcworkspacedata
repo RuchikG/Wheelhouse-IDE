@@ -315,6 +315,9 @@
       <FileRef
          location = "group:CmuxWorkspaces">
       </FileRef>
+      <FileRef
+         location = "group:WheelhouseCodeEditor">
+      </FileRef>
    </Group>
    <Group
       location = "container:Examples"

@@ -7,6 +7,7 @@ import PDFKit
 import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
+import WheelhouseCodeEditor
 
 enum FilePreviewInteraction {
     static let zoomStep: CGFloat = 1.25
@@ -1739,6 +1740,7 @@ struct FilePreviewPanelView: View {
     @State private var focusFlashOpacity = 0.0
     @State private var focusFlashAnimationGeneration = 0
     @AppStorage(FilePreviewWordWrapSettings.key) private var fileEditorWordWrap = FilePreviewWordWrapSettings.defaultEnabled
+    @AppStorage(CodeEditorPreference.enabledKey) private var usesCodeEditor = CodeEditorPreference.enabledByDefault
 
     private var themeForegroundColor: NSColor {
         appearance.foregroundColor
@@ -1810,16 +1812,27 @@ struct FilePreviewPanelView: View {
         } else {
             switch panel.previewMode {
             case .text:
-                FilePreviewTextEditor(
-                    panel: panel,
-                    isVisibleInUI: isVisibleInUI,
-                    themeBackgroundColor: contentBackgroundColor,
-                    themeForegroundColor: themeForegroundColor,
-                    drawsBackground: appearance.drawsContentBackground,
-                    gutterBackgroundColor: appearance.backgroundColor,
-                    wordWrap: fileEditorWordWrap,
-                    filePath: panel.filePath
-                )
+                if usesCodeEditor {
+                    FilePreviewCodeEditor(
+                        panel: panel,
+                        isVisibleInUI: isVisibleInUI,
+                        themeBackgroundColor: contentBackgroundColor,
+                        themeForegroundColor: themeForegroundColor,
+                        wordWrap: fileEditorWordWrap,
+                        onRequestPanelFocus: onRequestPanelFocus
+                    )
+                } else {
+                    FilePreviewTextEditor(
+                        panel: panel,
+                        isVisibleInUI: isVisibleInUI,
+                        themeBackgroundColor: contentBackgroundColor,
+                        themeForegroundColor: themeForegroundColor,
+                        drawsBackground: appearance.drawsContentBackground,
+                        gutterBackgroundColor: appearance.backgroundColor,
+                        wordWrap: fileEditorWordWrap,
+                        filePath: panel.filePath
+                    )
+                }
             case .pdf:
                 FilePreviewPDFView(
                     panel: panel,

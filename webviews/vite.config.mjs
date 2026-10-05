@@ -28,6 +28,18 @@ export default defineConfig({
         return null;
       },
     },
+    {
+      // The code editor ships Monaco's core and Monarch grammars only. The
+      // css/html/json/typescript language services each need their own worker
+      // and project context, so their registrations resolve to empty modules.
+      name: "cmux-monaco-skip-language-services",
+      load(id) {
+        if (/\/monaco-editor\/esm\/vs\/languages\/features\/(css|html|json|typescript)\/register\.js$/.test(id)) {
+          return { code: "export {};", map: null };
+        }
+        return null;
+      },
+    },
   ],
   build: {
     emptyOutDir: true,
@@ -45,7 +57,11 @@ export default defineConfig({
     // load grants read access to the whole output directory.
     modulePreload: false,
     rollupOptions: {
-      input: { main: "src/main.tsx", "diff-worker": "src/diff-worker.ts" },
+      input: {
+        main: "src/main.tsx",
+        "diff-worker": "src/diff-worker.ts",
+        "monaco-editor-worker": "src/code-editor/monaco-editor-worker.ts",
+      },
       output: {
         format: "es",
         // `main.mjs` is the page entry the host HTML loads; the worker entry
@@ -60,7 +76,16 @@ export default defineConfig({
         // versioned app-bundle file load, so content-hash cache-busting buys
         // nothing here. The chunk set is small and explicitly named, so stable
         // names do not collide.
-        chunkFileNames: "chunks/[name].mjs",
+        // Monaco's lazy Monarch grammars are named after their language
+        // (`monaco-lang-go.mjs`). They are named here rather than through
+        // `manualChunks`, which would also move Monaco's core into whichever
+        // grammar chunk claimed it first and make the editor worker load it.
+        chunkFileNames: (chunk) => {
+          const monacoLanguage = chunk.facadeModuleId?.match(
+            /\/monaco-editor\/esm\/vs\/languages\/definitions\/([^/]+)\//,
+          );
+          return monacoLanguage ? `chunks/monaco-lang-${monacoLanguage[1]}.mjs` : "chunks/[name].mjs";
+        },
         assetFileNames: "assets/[name][extname]",
         // The diff surface statically imports `@pierre/diffs` (renderer,
         // worker pool manager, shiki core), which lands in one `diff-vendor`
