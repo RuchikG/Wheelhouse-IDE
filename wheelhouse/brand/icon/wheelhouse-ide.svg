@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Wheelhouse IDE app icon: a terminal prompt inside a ship's wheel.
+       macOS icon grid: an 824 px tile centred on a 1024 px canvas. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#2A2F3A"/>
+  <g transform="translate(100 100) scale(1.609375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="256" r="150" stroke="#F4F1EA" stroke-width="28"/>
+    <path d="M420 256H462M92 256H50M256 92V50M256 420V462M372 372L401.7 401.7M140 140L110.3 110.3M372 140L401.7 110.3M140 372L110.3 401.7" stroke="#F4F1EA" stroke-width="26"/>
+    <polyline points="190,196 258,256 190,316" stroke="#5EE0C2" stroke-width="32"/>
+    <line x1="278" y1="316" x2="338" y2="316" stroke="#F4F1EA" stroke-width="32"/>
+  </g>
+</svg>

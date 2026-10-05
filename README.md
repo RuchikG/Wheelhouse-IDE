@@ -161,7 +161,12 @@ edited.
 Some names are cmux's on purpose, because scripts, documentation and the remote daemon depend on
 them: the `cmux` command and its subcommands, `~/.config/cmux` and `cmux.json`, `CMUX_*`
 environment variables, the bundle id prefix, and the process name. cmux Cloud, cmux Pro and the
-iOS app are Manaflow's products and keep their names. The app icon is still cmux's.
+iOS app are Manaflow's products and keep their names.
+
+The icon, a terminal prompt inside a ship's wheel, is drawn in
+`wheelhouse/brand/icon/wheelhouse-ide.svg`. `wheelhouse/brand/icon/generate.sh` renders it into the
+asset catalog (the dev build's icon set and the light and dark images the app shows in the Dock);
+run it after changing the SVG, then rebuild. The release, nightly and RC icon sets are still cmux's.
 
 ## Where the fork's code is
 
@@ -175,7 +180,7 @@ iOS app are Manaflow's products and keep their names. The app icon is still cmux
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
 | `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
 | `wheelhouse/defaults.sh` | Preferences the build applies on top of cmux's defaults |
-| `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE |
+| `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE, and the icon source |
 
 After changing anything under `webviews/`, regenerate the bundle:
 
@@ -194,8 +199,9 @@ errors and failed asset loads are logged under the `wheelhouse.code-editor` subs
 
 cmux moves quickly, so the fork keeps its changes small: new code goes in its own package and
 files, and upstream files are touched only where the editor hooks in. `upstream` is
-`manaflow-ai/cmux`; merge it regularly. `README.md` and the generated web bundle are the files most
-likely to conflict; keep this README, and regenerate the bundle after a merge.
+`manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
+files most likely to conflict; keep this README, regenerate the bundle after a merge, and rerun
+`wheelhouse/brand/icon/generate.sh` if upstream changes its icons.
 
 The translated `README.*.md` files are upstream's and describe cmux, not this fork.
 
