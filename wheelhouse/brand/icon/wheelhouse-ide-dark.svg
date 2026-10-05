@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Wheelhouse IDE app icon: a terminal prompt inside a ship's wheel.
+  <!-- Wheelhouse IDE app icon, dark variant: a terminal prompt inside a ship's wheel.
        macOS icon grid: an 824 px tile centred on a 1024 px canvas. -->
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#2A2F3A"/>
   <g transform="translate(100 100) scale(1.609375)" fill="none" stroke-linecap="round" stroke-linejoin="round">

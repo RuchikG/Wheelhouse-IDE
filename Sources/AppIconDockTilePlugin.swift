@@ -10,7 +10,8 @@ private enum DockTileAppIconMode: String {
     case dark
 
     init(defaultsValue: String?) {
-        self = Self(rawValue: defaultsValue ?? "") ?? .automatic
+        // Wheelhouse: no separate icon choice; see AppIconSettings.resolvedMode.
+        self = .automatic
     }
 
     func imageName(isDarkAppearance: Bool) -> NSImage.Name? {

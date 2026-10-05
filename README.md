@@ -180,10 +180,13 @@ them: the `cmux` command and its subcommands, `~/.config/cmux` and `cmux.json`, 
 environment variables, the bundle id prefix, and the process name. cmux Cloud, cmux Pro and the
 iOS app are Manaflow's products and keep their names.
 
-The icon, a terminal prompt inside a ship's wheel, is drawn in
-`wheelhouse/brand/icon/wheelhouse-ide.svg`. `wheelhouse/brand/icon/generate.sh` renders it into the
-asset catalog (the dev build's icon set and the light and dark images the app shows in the Dock);
-run it after changing the SVG, then rebuild. The release, nightly and RC icon sets are still cmux's.
+The icon, a terminal prompt inside a ship's wheel, has a dark and a light variant, drawn in
+`wheelhouse/brand/icon/wheelhouse-ide-dark.svg` and `wheelhouse-ide-light.svg`. The running app
+shows the one that matches its theme (Settings → Themes: System, Light or Dark) and switches with
+it. cmux's separate App Icon setting is removed, so the icon and the theme cannot disagree. Finder,
+and the Dock before the app has started, show the dark variant. `wheelhouse/brand/icon/generate.sh`
+renders both SVGs into the asset catalog; run it after changing one, then rebuild. The release,
+nightly and RC icon sets are still cmux's.
 
 ## Where the fork's code is
 

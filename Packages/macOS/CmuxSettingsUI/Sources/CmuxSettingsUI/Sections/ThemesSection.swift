@@ -108,13 +108,6 @@ public struct ThemesSection: View {
                     }
                 }
             }
-            SettingsCardDivider()
-            // Also under App. Both rows bind the same key and update each
-            // other; search lands on the App row, so this one has no anchor.
-            AppIconPickerRow(
-                selectedMode: appIcon.current,
-                onSelect: { appIcon.set($0) }
-            )
         }
     }
 

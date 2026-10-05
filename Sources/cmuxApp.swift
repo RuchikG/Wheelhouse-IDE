@@ -5012,11 +5012,8 @@ enum AppIconSettings {
     }
 
     static func resolvedMode(defaults: UserDefaults = .standard) -> AppIconMode {
-        guard let raw = defaults.string(forKey: modeKey),
-              let mode = AppIconMode(rawValue: raw) else {
-            return defaultMode
-        }
-        return mode
+        // Wheelhouse: the icon always follows the app's light or dark theme.
+        .automatic
     }
 
     static func applyIcon(_ mode: AppIconMode, environment: Environment? = nil) {

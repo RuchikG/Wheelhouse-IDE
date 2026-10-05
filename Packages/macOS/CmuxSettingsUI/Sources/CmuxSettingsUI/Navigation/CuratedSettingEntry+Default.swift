@@ -58,7 +58,6 @@ extension Array where Element == CuratedSettingEntry {
 
             // App
             .init(section: .app, id: "language", title: String(localized: "settings.app.language", defaultValue: "Language"), synonyms: "Language app.language locale l10n localization translation japanese english ja en nihongo restart"),
-            .init(section: .app, id: "app-icon", title: String(localized: "settings.app.appIcon", defaultValue: "App Icon"), synonyms: "App Icon app.appIcon dock icon application icon app switcher alternate icon"),
             .init(section: .app, id: "new-workspace-placement", title: String(localized: "settings.app.newWorkspacePlacement", defaultValue: "New Workspace Placement"), synonyms: "New Workspace Placement app.newWorkspacePlacement new tab insert position order top bottom end"),
             .init(section: .app, id: "workspace-layouts", title: String(localized: "settings.app.workspaceLayouts", defaultValue: "Workspace Layouts"), synonyms: "workspace layouts customize layout default new workspace menu save delete cmux.json actions"),
             .init(section: .app, id: "workspace-inherit-working-directory", title: String(localized: "settings.app.workspaceInheritWorkingDirectory", defaultValue: "Inherit Workspace Working Directory"), synonyms: "Inherit Workspace Working Directory app.workspaceInheritWorkingDirectory workspace cwd directory inherit current focused working-directory"),

@@ -219,14 +219,6 @@ public struct AppSection: View {
             }
             SettingsCardDivider()
 
-            // App Icon — three-up visual picker mirroring legacy
-            AppIconPickerRow(
-                selectedMode: appIcon.current,
-                onSelect: { appIcon.set($0) }
-            )
-            .settingsSearchAnchors(["setting:app:app-icon"])
-            SettingsCardDivider()
-
             // New Workspace Placement
             SettingsCardRow(
                 configurationReview: .json("app.newWorkspacePlacement"),

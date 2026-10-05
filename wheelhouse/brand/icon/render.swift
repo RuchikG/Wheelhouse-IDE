@@ -1,4 +1,4 @@
-// Renders wheelhouse-ide.svg to a PNG of the given pixel size.
+// Renders an icon SVG to a PNG of the given pixel size.
 //   swiftc -parse-as-library render.swift -o render && ./render <svg> <size> <out.png>
 import AppKit
 
