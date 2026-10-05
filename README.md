@@ -3,7 +3,8 @@
 Wheelhouse is a fork of [cmux](https://github.com/manaflow-ai/cmux), the Ghostty-based macOS
 terminal for AI coding agents. The goal is to run every project you have in flight from one
 window: a board of projects, and for each project a workspace with its terminals, agents, browser
-tabs and code. It adds two things to cmux: a project board and a built-in code editor.
+tabs and code. It adds three things to cmux: a project board, a built-in code editor, and
+notifications from agents running on SSH hosts.
 
 This is an early personal fork. It is not affiliated with or supported by Manaflow, and there are
 no packaged releases; you build it from source. Everything cmux does (workspaces, splits,
@@ -98,6 +99,15 @@ CLI), so it needs no changes to the app and also works with stock cmux. The side
 `proj`, the small CLI that creates lanes and opens projects, are in
 [`wheelhouse/board`](wheelhouse/board/README.md), with set-up steps.
 
+### Notifications from agents on SSH hosts
+
+cmux tells you when an agent on your Mac needs input or finishes, but an agent in a `cmux ssh`
+workspace is silent in current cmux releases. A small Claude Code hook, installed on the SSH host
+with one command, forwards those moments through the cmux relay, so the workspace and its board
+card show an unread notification. It stays out of the way for headless jobs and steps aside on
+cmux builds whose relay reports agent status itself. See
+[`wheelhouse/remote-notify`](wheelhouse/remote-notify/README.md).
+
 ### Roadmap
 
 | Step | State |
@@ -106,6 +116,8 @@ CLI), so it needs no changes to the app and also works with stock cmux. The side
 | LSP: completion, definitions, hover, diagnostics (gopls first) | Next |
 | Remote workspaces: edit and save files over SSH, language server on the remote host | Planned |
 | Project board: lanes, cards, project files, a worktree per project | Done |
+| Notifications from agents on SSH hosts | Done |
+| Agent status (working, waiting, idle) for SSH hosts on the board | Planned |
 | Board: drag cards between lanes; status from external tools (issue tracker, CI) on the card | Planned |
 
 ## Build
@@ -142,6 +154,7 @@ this fork is for.
 | `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page |
 | `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
+| `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
 
 After changing anything under `webviews/`, regenerate the bundle:
 
