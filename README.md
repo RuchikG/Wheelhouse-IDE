@@ -94,8 +94,9 @@ Design:
 - **Remote projects** are ordinary cmux SSH workspaces; the card carries a badge.
 
 The board is built on cmux's own extension points (custom sidebars, workspace groups and the
-CLI), so it needs no changes to the app. The sidebar script and the small CLI that creates
-lanes and opens projects are a working prototype kept outside this repository for now.
+CLI), so it needs no changes to the app and also works with stock cmux. The sidebar script and
+`proj`, the small CLI that creates lanes and opens projects, are in
+[`wheelhouse/board`](wheelhouse/board/README.md), with set-up steps.
 
 ### Roadmap
 
@@ -104,7 +105,7 @@ lanes and opens projects are a working prototype kept outside this repository fo
 | Editor in the file panel | Done |
 | LSP: completion, definitions, hover, diagnostics (gopls first) | Next |
 | Remote workspaces: edit and save files over SSH, language server on the remote host | Planned |
-| Project board | Working prototype, outside this repository |
+| Project board: lanes, cards, project files, a worktree per project | Done |
 | Board: drag cards between lanes; status from external tools (issue tracker, CI) on the card | Planned |
 
 ## Build
@@ -140,6 +141,7 @@ this fork is for.
 | `Sources/Panels/FilePreviewCodeEditor.swift` | Adapter between the file panel and the editor |
 | `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page |
 | `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
+| `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
 
 After changing anything under `webviews/`, regenerate the bundle:
 

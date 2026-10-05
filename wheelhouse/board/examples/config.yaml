@@ -1,0 +1,6 @@
+# Copy to <home>/config.yaml (default home: ~/.config/wheelhouse). Every key is optional.
+worktrees: ~/code/.worktrees   # default: <home>/worktrees
+browser_profile: work          # cmux browser profile for project tabs; default: cmux's own
+agent_dir: ~/code              # where agents start; default: the workspace directory
+remote_host: build-box         # ssh destination for remote projects that name no host
+remote_agent_dir: ~/code       # where agents start on the remote host

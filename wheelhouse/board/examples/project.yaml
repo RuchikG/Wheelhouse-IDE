@@ -1,0 +1,22 @@
+# Copy to <home>/projects/<project>.yaml (default home: ~/.config/wheelhouse).
+# Files starting with _ are ignored.
+name: Example Project
+lane: dev                  # design | dev | review | release | done
+location: local            # local | remote
+# host: build-box          # remote only: ssh destination (default: remote_host in config.yaml)
+summary: One line shown on the board card
+dir: ~/code/example        # workspace directory; defaults to the first repo's checkout
+repos:
+  - path: ~/code/api
+    branch: feat/example   # the project gets its own worktree on this branch
+    base: origin/main      # start point when the branch does not exist yet
+  - path: ~/code/shared-lib
+    branch: feat/example
+    worktree: false        # work in the main checkout instead of a worktree
+links:
+  - title: Tech design
+    url: https://example.com/doc
+agents:
+  - name: agent
+    command: claude
+    dir: ~/code            # optional; default: agent_dir in config.yaml, else the workspace directory
