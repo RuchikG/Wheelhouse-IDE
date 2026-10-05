@@ -15,4 +15,5 @@ export CMUX_DEV_BACKEND_MODE="${CMUX_DEV_BACKEND_MODE:-local}"
 python3 "$WHEELHOUSE_ROOT/wheelhouse/brand/apply.py" "$WHEELHOUSE_APP_PATH"
 # The string tables are sealed resources; sign again the way reload.sh does.
 /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der "$WHEELHOUSE_APP_PATH"
+"$WHEELHOUSE_ROOT/wheelhouse/defaults.sh"
 echo "Wheelhouse IDE: $WHEELHOUSE_APP_PATH (open it with wheelhouse/open.sh)"

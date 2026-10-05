@@ -147,6 +147,10 @@ features that need Manaflow's services and are not part of what this fork is for
 `WHEELHOUSE_TAG` (default `wheelhouse`) names the build; a different tag is a separate app with
 separate settings.
 
+The build also sets a few preferences (`wheelhouse/defaults.sh`) that hide cmux's own account
+control, its Pro upgrade prompts, the phone pairing button and the red dev-build label. They are
+ordinary cmux switches, so they can be turned back on from the app's debug menu.
+
 ### Naming
 
 The app is named Wheelhouse IDE, and its menus, dialogs and settings say Wheelhouse IDE where
@@ -170,6 +174,7 @@ iOS app are Manaflow's products and keep their names. The app icon is still cmux
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
 | `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
+| `wheelhouse/defaults.sh` | Preferences the build applies on top of cmux's defaults |
 | `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE |
 
 After changing anything under `webviews/`, regenerate the bundle:
