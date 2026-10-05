@@ -9,6 +9,8 @@ case "$WHEELHOUSE_TAG" in
   *[!a-z0-9-]*) echo "WHEELHOUSE_TAG must be lowercase letters, digits and dashes" >&2; exit 2 ;;
 esac
 export CMUX_DEV_BACKEND_MODE="${CMUX_DEV_BACKEND_MODE:-local}"
+# reload.sh turns cmux Cloud on in dev builds unless told otherwise.
+export CMUX_DEV_CLOUD_ENABLED="${CMUX_DEV_CLOUD_ENABLED:-0}"
 "$WHEELHOUSE_ROOT/scripts/reload.sh" --tag "$WHEELHOUSE_TAG" --name "$WHEELHOUSE_APP_NAME" "$@"
 
 [ -d "$WHEELHOUSE_APP_PATH" ] || { echo "build did not produce $WHEELHOUSE_APP_PATH" >&2; exit 1; }

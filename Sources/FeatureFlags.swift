@@ -438,7 +438,9 @@ final class CmuxFeatureFlags {
     private let pinsFlagsToLocalValues: Bool
 
     nonisolated static var pinsFlagsToLocalValuesForCurrentLaunch: Bool {
+        // Wheelhouse: with telemetry off, nothing is fetched from the flag service either.
         ProcessInfo.processInfo.environment["CMUX_UI_TEST_MODE"] == "1"
+            || !TelemetrySettings.enabledForCurrentLaunch
     }
     private var resolutionsByKey: [String: CmuxFeatureFlagResolution] = [:]
 
