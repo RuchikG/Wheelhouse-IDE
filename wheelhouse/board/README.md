@@ -31,10 +31,10 @@ proj open my-project
 button's right-click menu, or run `cmux sidebar select projects-board`.
 
 `proj` drives whichever cmux `CMUX_BIN` names (default: `cmux` on `PATH`, else the installed app).
-For a tagged dev build of this repository, use the wrapper:
+For Wheelhouse IDE, point it at the app's CLI:
 
 ```sh
-CMUX_BIN=$PWD/cmux-dev WHEELHOUSE_TAG=<tag> proj init
+CMUX_BIN=$PWD/../cli proj init
 ```
 
 ## Commands

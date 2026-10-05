@@ -1,5 +1,0 @@
-#!/bin/sh
-# cmux CLI of a running tagged dev build of this repository:
-#   CMUX_BIN=$PWD/cmux-dev proj init
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-exec env CMUX_TAG="${WHEELHOUSE_TAG:-wheelhouse}" "$root/scripts/cmux-debug-cli.sh" "$@"

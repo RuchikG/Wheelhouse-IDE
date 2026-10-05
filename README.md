@@ -39,7 +39,7 @@ To go back to the native editor:
 defaults write <bundle id> wheelhouse.codeEditor.enabled -bool false
 ```
 
-The bundle id of a tagged dev build is `com.cmuxterm.app.debug.<tag>`.
+The bundle id is `com.cmuxterm.app.debug.<tag>`, so `com.cmuxterm.app.debug.wheelhouse` by default.
 
 ### Project board
 
@@ -129,21 +129,35 @@ Rust. Rebuilding the web bundle also needs [bun](https://bun.sh).
 git clone https://github.com/RuchikG/Wheelhouse-IDE.git
 cd Wheelhouse-IDE
 ./scripts/setup.sh
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag wheelhouse
+wheelhouse/build.sh     # first build: around 25 minutes
+wheelhouse/open.sh
 ```
 
-The first build takes around 25 minutes. `reload.sh` prints the path of the built app
-(`cmux DEV wheelhouse.app`); open it from Finder or with `open`. A tagged build has its own bundle
-id and socket, so it runs next to an installed cmux without touching it. Drive it from a terminal
-with:
+`wheelhouse/build.sh` produces `Wheelhouse IDE.app`. It is a tagged dev build of cmux with its own
+bundle id, settings and socket, so it runs next to an installed cmux without touching it. Drive it
+from a terminal with `wheelhouse/cli`, which is the `cmux` command pointed at this app:
 
 ```sh
-CMUX_TAG=wheelhouse scripts/cmux-debug-cli.sh open path/to/file.go
+wheelhouse/cli open path/to/file.go
 ```
 
-`CMUX_DEV_BACKEND_MODE=local` keeps the build off the cmux cloud backend. Sign-in, cloud machines
-and mobile pairing are upstream features that need Manaflow's services and are not part of what
-this fork is for.
+The build stays off the cmux cloud backend. Sign-in, cloud machines and mobile pairing are upstream
+features that need Manaflow's services and are not part of what this fork is for.
+
+`WHEELHOUSE_TAG` (default `wheelhouse`) names the build; a different tag is a separate app with
+separate settings.
+
+### Naming
+
+The app is named Wheelhouse IDE, and its menus, dialogs and settings say Wheelhouse IDE where
+cmux's say cmux. This is done after the build, by rewriting the app's compiled text
+(`wheelhouse/brand/apply.py`) in all 20 languages, so no upstream source or translation file is
+edited.
+
+Some names are cmux's on purpose, because scripts, documentation and the remote daemon depend on
+them: the `cmux` command and its subcommands, `~/.config/cmux` and `cmux.json`, `CMUX_*`
+environment variables, the bundle id prefix, and the process name. cmux Cloud, cmux Pro and the
+iOS app are Manaflow's products and keep their names. The app icon is still cmux's.
 
 ## Where the fork's code is
 
@@ -155,6 +169,8 @@ this fork is for.
 | `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
+| `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
+| `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE |
 
 After changing anything under `webviews/`, regenerate the bundle:
 

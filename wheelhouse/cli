@@ -1,0 +1,15 @@
+#!/bin/sh
+# The cmux CLI of the running Wheelhouse IDE build.
+#   wheelhouse/cli workspace list
+#   CMUX_BIN=$PWD/wheelhouse/cli proj init
+set -eu
+. "$(dirname "$0")/lib.sh"
+cli="$WHEELHOUSE_APP_PATH/Contents/Resources/bin/cmux"
+[ -x "$cli" ] || { echo "not built yet: run wheelhouse/build.sh" >&2; exit 1; }
+[ -S "$WHEELHOUSE_SOCKET_PATH" ] || { echo "Wheelhouse IDE is not running: run wheelhouse/open.sh" >&2; exit 1; }
+unset CMUX_SOCKET CMUX_SOCKET_PASSWORD CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID CMUXD_UNIX_PATH CMUX_DEBUG_LOG
+export CMUX_SOCKET_PATH="$WHEELHOUSE_SOCKET_PATH"
+export CMUX_TAG="$WHEELHOUSE_TAG"
+export CMUX_BUNDLE_ID="com.cmuxterm.app.debug.$WHEELHOUSE_TAG"
+export CMUX_BUNDLED_CLI_PATH="$cli"
+exec "$cli" "$@"
