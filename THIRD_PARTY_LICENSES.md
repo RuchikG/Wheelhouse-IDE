@@ -356,6 +356,30 @@ The following packages are linked into the cmux app binary.
 
 ---
 
+## Code Editor Assets
+
+The code editor bundles Monaco Editor (built from `webviews/`) inside the
+generated `Resources/markdown-viewer/webviews-app/` bundle, together with the
+two libraries Monaco depends on.
+
+### Monaco Editor
+
+- **License:** MIT License
+- **Copyright:** Copyright (c) 2016 - present Microsoft Corporation
+- **Source:** https://github.com/microsoft/monaco-editor
+
+### DOMPurify
+
+- **License:** Mozilla Public License 2.0 or Apache License 2.0
+- **Copyright:** Copyright (c) Cure53 and other contributors
+- **Source:** https://github.com/cure53/DOMPurify
+
+### marked
+
+- **License:** MIT License
+- **Copyright:** Copyright (c) 2018+, MarkedJS; Copyright (c) 2011-2018, Christopher Jeffrey
+- **Source:** https://github.com/markedjs/marked
+
 ## Diff Viewer Highlighting Assets
 
 cmux bundles compiled syntax-highlighting code and grammars (shiki and its
