@@ -22,6 +22,11 @@ const usage = `proj - project workspaces on cmux
                              turn an existing workspace (default: the current one) into the project's workspace
   proj lane <project> <lane> move a project to a lane (manifest and board)
   proj lane pull             copy lane moves made on the board back into the manifests
+  proj link [<project>]      show a project's links, one per link kind
+  proj link [<project>] <kind> <url>
+                             set a project's link of that kind (the chip on its card)
+  proj link rm [<project>] <kind>
+                             remove it; without <project>, the current workspace's project is meant
   proj wt                    show every project checkout per repo, with conflicts
   proj wt rm <project>       remove a project's worktrees (branches stay; refuses when dirty)
   proj check                 validate the manifests
@@ -33,6 +38,7 @@ Settings live in <home>/config.yaml (all optional); a WHEELHOUSE_* variable over
   agent_dir                    where agents start (default: the workspace directory) WHEELHOUSE_AGENT_DIR
   remote_host                  ssh destination for remote projects without a host    WHEELHOUSE_REMOTE_HOST
   remote_agent_dir             where agents start on the remote host                 WHEELHOUSE_REMOTE_AGENT_DIR
+  link_kinds                   the links a project can carry: a list of {title, icon}
   CMUX_BIN                     cmux CLI to drive (default: cmux on PATH, else the installed app's)
 `
 
@@ -64,13 +70,15 @@ func run(cmd string, args []string) error {
 	case "ls":
 		return cmdLs(cfg, all)
 	case "check":
-		return cmdCheck(all)
+		return cmdCheck(cfg, all)
 	case "open":
 		return cmdOpen(cfg, all, args)
 	case "adopt":
 		return cmdAdopt(cfg, all, args)
 	case "lane":
 		return cmdLane(all, args)
+	case "link":
+		return cmdLink(cfg, all, args)
 	case "wt":
 		return cmdWt(cfg, all, args)
 	}
@@ -134,8 +142,8 @@ func ensureProfile(name string) error {
 	return nil
 }
 
-func cmdCheck(all []*Manifest) error {
-	issues := validate(all)
+func cmdCheck(cfg *config, all []*Manifest) error {
+	issues := validate(all, cfg.linkKinds)
 	for _, i := range issues {
 		fmt.Println(i)
 	}
@@ -208,7 +216,7 @@ func cmdOpen(cfg *config, all []*Manifest, args []string) error {
 		return err
 	}
 	blocked := false
-	for _, i := range validate(all) {
+	for _, i := range validate(all, cfg.linkKinds) {
 		if i.Slug == m.Slug {
 			fmt.Println(i)
 			blocked = blocked || !i.Warn
@@ -586,7 +594,7 @@ func cmdWt(cfg *config, all []*Manifest, args []string) error {
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	for _, i := range validate(all) {
+	for _, i := range validate(all, cfg.linkKinds) {
 		if strings.HasPrefix(i.Msg, "repo ") {
 			fmt.Println(i)
 		}

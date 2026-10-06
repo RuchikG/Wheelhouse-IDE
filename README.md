@@ -135,12 +135,17 @@ Design:
 - **Click to jump.** Clicking a card selects the project's workspace, and goes straight to the
   agent that is waiting if there is one. Right-click moves the card to another lane or marks it
   read.
-- **Links are chips on the card,** not tabs that stay open. A project's pages (a ticket, a design
-  document, a pipeline) show as small chips: icons on every card, with their names on the
-  selected one. Clicking a chip opens the page as a browser tab in the project's workspace, or
-  shows the tab if it is already open; an open link's chip is tinted. Close the tab when you are
-  done, from the tab or from the chip's right-click menu, and the chip stays for next time.
-- **The board only reads state, jumps and opens links.** Work happens in the project's workspace:
+- **Links are chips on the card,** not tabs that stay open. A project carries one link of each
+  kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
+  pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip
+  opens the page as a browser tab in the project's workspace, or shows the tab if it is already
+  open; an open link's chip is tinted. Close the tab when you are done, from the tab or from the
+  chip's right-click menu, and the chip stays for next time.
+- **Links are added where you are.** Right-click a card, pick the kind under Links and paste the
+  address into the field that appears on the card; a chip's own menu changes or removes its
+  link. From a terminal or an agent, `proj link <kind> <url>` does the same for the project of
+  the workspace it runs in, and a Claude Code skill tells the agent so.
+- **Beyond links, the board only reads state and jumps.** Work happens in the project's workspace:
   in its terminals and agents, in the real web tools opened as browser tabs, and in the editor.
   Nothing is re-implemented on the board.
 - **Workspaces that are not projects** are listed under "Not on the board" and can be added to a

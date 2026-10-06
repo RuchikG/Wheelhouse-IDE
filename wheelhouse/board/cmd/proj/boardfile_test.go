@@ -1,19 +1,25 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
-func TestBoardDataKeepsOnlyUsableLinks(t *testing.T) {
-	cfg := &config{profile: "work"}
+func TestBoardDataListsLinksByKind(t *testing.T) {
+	cfg := &config{home: "/home/me/wheelhouse", profile: "work", linkKinds: []LinkKind{
+		{Title: "PRD", Icon: "doc.text"},
+		{Title: "Tech Design"},
+		{Title: "Tracker", Icon: "ticket"},
+	}}
 	all := []*Manifest{
-		{Name: "Checkout", Links: []Link{
-			{Title: "Tech design", URL: "https://example.com/doc", Icon: "doc.text"},
-			{URL: "https://example.com/untitled"},
-			{Title: "No address"},
+		{Name: "Checkout", Slug: "checkout", Links: []Link{
+			{Title: "tech design", URL: "https://example.com/design"},
+			{Title: "Dashboard", URL: "https://example.com/dashboard"},
+			{Title: "Tracker"},
+			{Title: "PRD", URL: "https://example.com/prd", Icon: "star"},
 		}},
-		{Name: "No links"},
+		{Name: "No links", Slug: "no-links"},
 	}
 
 	data := boardDataFor(cfg, all)
@@ -21,21 +27,22 @@ func TestBoardDataKeepsOnlyUsableLinks(t *testing.T) {
 	if data.BrowserProfile != "work" {
 		t.Errorf("browser profile = %q, want work", data.BrowserProfile)
 	}
-	if _, ok := data.Projects["No links"]; ok {
-		t.Error("a project without links should not be listed")
+	if !strings.HasPrefix(data.Proj, "WHEELHOUSE_HOME='/home/me/wheelhouse' '") {
+		t.Errorf("proj command = %q", data.Proj)
 	}
-	links := data.Projects["Checkout"].Links
-	if len(links) != 2 {
-		t.Fatalf("links = %+v, want 2", links)
+	wantKinds := []boardKind{{"PRD", "doc.text"}, {"Tech Design", "doc.text"}, {"Tracker", "ticket"}}
+	if !slices.Equal(data.Kinds, wantKinds) {
+		t.Errorf("kinds = %+v, want %+v", data.Kinds, wantKinds)
 	}
-	if links[0] != (boardLink{Title: "Tech design", URL: "https://example.com/doc", Icon: "doc.text"}) {
-		t.Errorf("first link = %+v", links[0])
+	if got, ok := data.Projects["No links"]; !ok || got.Slug != "no-links" || got.Links == nil || len(got.Links) != 0 {
+		t.Errorf("a project without links should be listed with an empty list, got %+v (%v)", got, ok)
 	}
-	if links[1].Icon != "link" {
-		t.Errorf("a link without an icon or a telling title should get the link icon, got %q", links[1].Icon)
+	want := []boardLink{
+		{Title: "PRD", URL: "https://example.com/prd", Icon: "star"},
+		{Title: "Tech Design", URL: "https://example.com/design", Icon: "doc.text"},
 	}
-	if links[1].Title != "https://example.com/untitled" {
-		t.Errorf("a link without a title should be titled by its address, got %q", links[1].Title)
+	if got := data.Projects["Checkout"]; got.Slug != "checkout" || !slices.Equal(got.Links, want) {
+		t.Errorf("Checkout = %+v, want links %+v", got, want)
 	}
 }
 
@@ -59,8 +66,10 @@ func TestDefaultLinkIcon(t *testing.T) {
 func TestRenderBoardReplacesTheDataLine(t *testing.T) {
 	source := "// board\nconst BOARD = { projects: {}, browserProfile: \"\" };\nsidebar();\n"
 	data := boardData{
-		Projects:       map[string]boardProject{"A </script> \"B\"": {Links: []boardLink{{Title: "Doc", URL: "https://example.com/?a=1&b=2"}}}},
+		Projects:       map[string]boardProject{"A </script> \"B\"": {Slug: "a", Links: []boardLink{{Title: "Doc", URL: "https://example.com/?a=1&b=2"}}}},
+		Kinds:          []boardKind{{Title: "Doc", Icon: "doc.text"}},
 		BrowserProfile: "work",
+		Proj:           "'/bin/proj'",
 	}
 
 	out, err := renderBoard(source, "/src/projects-board.js", data)
@@ -72,7 +81,7 @@ func TestRenderBoardReplacesTheDataLine(t *testing.T) {
 	if !strings.HasPrefix(lines[0], boardGenerated+"/src/projects-board.js") {
 		t.Errorf("first line = %q", lines[0])
 	}
-	want := `const BOARD = {"projects":{"A \u003c/script\u003e \"B\"":{"links":[{"title":"Doc","url":"https://example.com/?a=1\u0026b=2"}]}},"browserProfile":"work"};`
+	want := `const BOARD = {"projects":{"A \u003c/script\u003e \"B\"":{"slug":"a","links":[{"title":"Doc","url":"https://example.com/?a=1\u0026b=2"}]}},"kinds":[{"title":"Doc","icon":"doc.text"}],"browserProfile":"work","proj":"'/bin/proj'"};`
 	if lines[2] != want {
 		t.Errorf("data line =\n%s\nwant\n%s", lines[2], want)
 	}

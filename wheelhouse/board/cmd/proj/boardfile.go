@@ -25,35 +25,54 @@ type boardLink struct {
 }
 
 type boardProject struct {
+	Slug  string      `json:"slug"`
 	Links []boardLink `json:"links"`
+}
+
+type boardKind struct {
+	Title string `json:"title"`
+	Icon  string `json:"icon"`
 }
 
 type boardData struct {
 	Projects       map[string]boardProject `json:"projects"`
+	Kinds          []boardKind             `json:"kinds"`
 	BrowserProfile string                  `json:"browserProfile"`
+	// Proj is the shell command that runs this proj; the board uses it to save a link.
+	Proj string `json:"proj"`
 }
 
+// boardDataFor lists every project with its links in the order of the link kinds. A link that
+// is of no kind stays off the board.
 func boardDataFor(cfg *config, all []*Manifest) boardData {
-	data := boardData{Projects: map[string]boardProject{}, BrowserProfile: cfg.profile}
+	data := boardData{Projects: map[string]boardProject{}, Kinds: []boardKind{}, BrowserProfile: cfg.profile}
+	for _, k := range cfg.linkKinds {
+		data.Kinds = append(data.Kinds, boardKind{Title: k.Title, Icon: k.icon()})
+	}
 	for _, m := range all {
-		var links []boardLink
-		for _, l := range m.Links {
-			if l.URL == "" {
+		links := []boardLink{}
+		for _, k := range cfg.linkKinds {
+			l, ok := m.linkOf(k)
+			if !ok || l.URL == "" {
 				continue
-			}
-			title := l.Title
-			if title == "" {
-				title = l.URL
 			}
 			icon := l.Icon
 			if icon == "" {
-				icon = defaultLinkIcon(title)
+				icon = k.icon()
 			}
-			links = append(links, boardLink{Title: title, URL: l.URL, Icon: icon})
+			links = append(links, boardLink{Title: k.Title, URL: l.URL, Icon: icon})
 		}
-		if len(links) > 0 {
-			data.Projects[m.Name] = boardProject{Links: links}
+		data.Projects[m.Name] = boardProject{Slug: m.Slug, Links: links}
+	}
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
 		}
+		home := cfg.home
+		if abs, err := filepath.Abs(home); err == nil {
+			home = abs
+		}
+		data.Proj = "WHEELHOUSE_HOME=" + shellQuote(home) + " " + shellQuote(exe)
 	}
 	return data
 }
@@ -68,7 +87,7 @@ var linkIconKinds = []struct {
 	{"doc.text", []string{"doc", "docs", "design", "prd", "spec", "rfc", "plan", "notes", "wiki", "requirements"}},
 }
 
-// defaultLinkIcon picks a chip icon for a link whose project file names none.
+// defaultLinkIcon picks a chip icon for a link kind that names none.
 func defaultLinkIcon(title string) string {
 	words := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)

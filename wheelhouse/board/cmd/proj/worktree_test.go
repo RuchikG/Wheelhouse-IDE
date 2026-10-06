@@ -133,7 +133,7 @@ func TestValidateFlagsOverlap(t *testing.T) {
 		{Slug: "d", Name: "Dev", Lane: "nope", Location: locLocal},
 	}
 	var got []string
-	for _, i := range validate(all) {
+	for _, i := range validate(all, defaultLinkKinds) {
 		got = append(got, i.String())
 	}
 	joined := strings.Join(got, "\n")

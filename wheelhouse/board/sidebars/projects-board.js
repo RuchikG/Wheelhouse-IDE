@@ -12,7 +12,7 @@ const QUIET = "#7f7f7f66";
 const OPEN = "#5EE0C2";
 
 // `proj` rewrites this line in the installed copy: a sidebar cannot read the project files.
-const BOARD = { projects: {}, browserProfile: "" };
+const BOARD = { projects: {}, kinds: [], browserProfile: "", proj: "" };
 
 const workspaces = () => data.workspaces() ?? [];
 const groups = () => data.groups() ?? [];
@@ -82,19 +82,13 @@ function jump(w) {
 
 // Link chips use sidebar features that older cmux releases lack; there the board goes without.
 const HAS_CHIPS = typeof Text("").fixedSize === "function" && typeof Text("").cursor === "function";
+const KINDS = HAS_CHIPS ? BOARD.kinds ?? [] : [];
 
-const linksOf = (w) => (HAS_CHIPS ? BOARD.projects[w?.title]?.links ?? [] : []);
+const project = (w) => BOARD.projects[w?.title];
+const linksOf = (w) => (HAS_CHIPS ? project(w)?.links ?? [] : []);
 
 // A link's tab carries the link's title, which is how the board finds it again.
 const linkTab = (w, link) => (w?.tabs ?? []).find((t) => t.title === link?.title);
-
-// The selected card names its links, one to a row; the other cards show one row of icons.
-function linkRows(w) {
-  const links = linksOf(w);
-  if (!links.length) return [];
-  if (!w.selected) return [{ key: "icons", labelled: false, links }];
-  return links.map((link, i) => ({ key: "labelled-" + i, labelled: true, links: [link] }));
-}
 
 // Shows the link's tab, opening it first when the project has none: next to the project's
 // other link tabs, or in a new browser pane on the right for the first one.
@@ -123,36 +117,102 @@ function closeLink(w, link) {
   if (tab?.surfaceId) cmux("surface.close", { surface_id: tab.surfaceId, workspace_id: w.id });
 }
 
-function linkChip(w, row, link) {
+// The card and the link kind whose address is being typed, if any.
+const [editing, setEditing] = signal(null);
+
+function editLink(w, kind) {
+  if (!project(w)) {
+    log("projects-board: " + w.title + " has no project file to keep links in");
+    return;
+  }
+  setEditing({ workspaceId: w.id, kind: kind.title });
+}
+
+const shellQuote = (text) => "'" + String(text).replaceAll("'", "'\\''") + "'";
+
+// A sidebar cannot write the project file, so `proj link` does it in a workspace of its own.
+// That workspace closes when the command succeeds and waits with the message when it fails;
+// the pause keeps a quick success from being taken for a crashed command.
+function runProj(args) {
+  const command = BOARD.proj + " link " + args.map(shellQuote).join(" ");
+  cmux("workspace.create", {
+    title: "Saving link",
+    focus: "false",
+    initial_command: command + " && sleep 1 || { echo; echo 'The link was not changed. Press Return to close.'; read _; }",
+  });
+}
+
+function saveLink(w, kind, address) {
+  setEditing(null);
+  const slug = project(w)?.slug;
+  if (!slug || !address.trim()) return;
+  // A tab still showing the address that is being replaced would pass for the new link's.
+  closeLink(w, { title: kind });
+  runProj([slug, kind, address.trim()]);
+}
+
+function removeLink(w, link) {
+  const slug = project(w)?.slug;
+  if (slug) runProj(["rm", slug, link.title]);
+}
+
+function linkMenu(w) {
+  if (!KINDS.length || !BOARD.proj) return [];
+  const verb = (kind) => (linksOf(w()).some((l) => l.title === kind.title) ? "Change " : "Add ");
+  return [
+    Menu("Links", KINDS.map((kind) => Button(() => verb(kind) + kind.title + "…", () => editLink(w(), kind)))),
+    Divider(),
+  ];
+}
+
+function linkChip(w, link) {
   const isOpen = () => Boolean(linkTab(w(), link()));
   return HStack({ spacing: 4 }, [
     Image(() => link()?.icon || "link").font(10)
       .color(() => (isOpen() ? OPEN : "secondary")),
-    Text(() => (row()?.labelled ? link()?.title ?? "" : ""))
-      .font(11).lineLimit(1).fixedSize("horizontal"),
+    Text(() => link()?.title ?? "").font(11).lineLimit(1).fixedSize("horizontal"),
   ])
     .paddingHorizontal(6).paddingVertical(3)
     .cornerRadius(6)
     .background(() => (isOpen() ? OPEN + "2e" : "#7f7f7f29"))
     .borderColor(() => (isOpen() ? OPEN + "99" : "#7f7f7f4d")).borderWidth(1)
     .hoverBackground("#7f7f7f47")
-    .help(() => link()?.title ?? "")
+    .help(() => link()?.url ?? "")
     .cursor("pointer")
     .onTap(() => openLink(w(), link()))
     .contextMenu([
       Button(() => (isOpen() ? "Show tab" : "Open tab"), () => openLink(w(), link())),
       Button("Close tab", () => closeLink(w(), link())),
-      Divider(),
       Button("Open in default browser", () => openURL(link().url)),
+      ...(BOARD.proj
+        ? [
+            Divider(),
+            Button("Change link…", () => editLink(w(), link())),
+            Button("Remove link", () => removeLink(w(), link())),
+          ]
+        : []),
     ]);
 }
 
+// One named chip to a row, on every card.
 function linkChips(w) {
-  return ForEach({ items: () => linkRows(w()), key: (row) => row.key }, (row) =>
+  return ForEach({ items: () => linksOf(w()), key: (link) => link.title + "\n" + link.url }, (link) =>
+    HStack({ spacing: 0 }, [linkChip(w, link), Spacer({ minLength: 0 })]));
+}
+
+function linkEditor(w) {
+  const rows = () => {
+    const e = editing();
+    return e && e.workspaceId === w()?.id ? [e] : [];
+  };
+  return ForEach({ items: rows, key: (e) => e.workspaceId + "\n" + e.kind }, (e) =>
     HStack({ spacing: 5 }, [
-      ForEach({ items: () => row()?.links ?? [], key: (link) => link.title + "\n" + link.url }, (link) =>
-        linkChip(w, row, link)),
-      Spacer({ minLength: 0 }),
+      Image(() => KINDS.find((k) => k.title === e()?.kind)?.icon || "link").font(10).color("secondary"),
+      TextField("", {
+        placeholder: () => "Paste the " + (e()?.kind ?? "") + " link, then Return",
+        onSubmit: (text) => saveLink(w(), e().kind, text),
+        onCancel: () => setEditing(null),
+      }),
     ]));
 }
 
@@ -203,6 +263,7 @@ function card(w) {
       .opacity(() => (w()?.progress ? 1 : 0))
       .frame(() => ({ height: w()?.progress ? 4 : 0 })),
     linkChips(w),
+    linkEditor(w),
   ])
     .paddingHorizontal(10).paddingVertical(7)
     .cornerRadius(8)
@@ -211,6 +272,7 @@ function card(w) {
     .frame({ maxWidth: "infinity" })
     .onTap(() => jump(w()))
     .contextMenu([
+      ...linkMenu(w),
       laneMenu(w, "Move to lane"),
       Button("Take off the board", () => cmux("workspace.group.remove", { workspace_id: w().id })),
       Divider(),

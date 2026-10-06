@@ -62,10 +62,11 @@ func (r Repo) wantsWorktree() bool {
 	return r.Branch != ""
 }
 
+// A Link's title names its kind (link_kinds in config.yaml).
 type Link struct {
 	Title string `yaml:"title"`
 	URL   string `yaml:"url"`
-	// Icon is an SF Symbol name for the link's chip on the board.
+	// Icon is an SF Symbol name that replaces the kind's icon on the link's chip.
 	Icon string `yaml:"icon"`
 }
 
@@ -159,7 +160,7 @@ func (i issue) String() string {
 	return fmt.Sprintf("%-5s %s: %s", level, i.Slug, i.Msg)
 }
 
-func validate(all []*Manifest) []issue {
+func validate(all []*Manifest, kinds []LinkKind) []issue {
 	var out []issue
 	add := func(m *Manifest, warn bool, format string, a ...any) {
 		out = append(out, issue{m.Slug, fmt.Sprintf(format, a...), warn})
@@ -189,9 +190,17 @@ func validate(all []*Manifest) []issue {
 		if m.Location != locLocal && m.Location != locRemote {
 			add(m, false, "location %q is not local or remote", m.Location)
 		}
+		linked := map[string]bool{}
 		for _, l := range m.Links {
 			if l.URL == "" {
 				add(m, false, "link %q has no url", l.Title)
+			}
+			if kind, ok := findKind(kinds, l.Title); !ok {
+				add(m, true, "link %q is not one of the link kinds (%s) and stays off the board", l.Title, kindTitles(kinds))
+			} else if linked[kind.Title] {
+				add(m, false, "more than one %s link", kind.Title)
+			} else {
+				linked[kind.Title] = true
 			}
 		}
 

@@ -18,14 +18,16 @@ type config struct {
 	agentDir       string
 	remoteHost     string
 	remoteAgentDir string
+	linkKinds      []LinkKind
 }
 
 type configFile struct {
-	Worktrees      string `yaml:"worktrees"`
-	BrowserProfile string `yaml:"browser_profile"`
-	AgentDir       string `yaml:"agent_dir"`
-	RemoteHost     string `yaml:"remote_host"`
-	RemoteAgentDir string `yaml:"remote_agent_dir"`
+	Worktrees      string     `yaml:"worktrees"`
+	BrowserProfile string     `yaml:"browser_profile"`
+	AgentDir       string     `yaml:"agent_dir"`
+	RemoteHost     string     `yaml:"remote_host"`
+	RemoteAgentDir string     `yaml:"remote_agent_dir"`
+	LinkKinds      []LinkKind `yaml:"link_kinds"`
 }
 
 func configHome() (string, error) {
@@ -70,6 +72,13 @@ func loadConfig() (*config, error) {
 		agentDir:       expandHome(file.AgentDir),
 		remoteHost:     file.RemoteHost,
 		remoteAgentDir: file.RemoteAgentDir,
+		linkKinds:      file.LinkKinds,
+	}
+	if len(cfg.linkKinds) == 0 {
+		cfg.linkKinds = defaultLinkKinds
+	}
+	if err := checkLinkKinds(cfg.linkKinds); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if v := os.Getenv("WHEELHOUSE_WORKTREES"); v != "" {
 		cfg.worktrees = expandHome(v)

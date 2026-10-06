@@ -8,6 +8,7 @@ the CLI), so they work with this fork and with stock cmux.
 - `cmd/proj`: creates the lane groups, opens a project as a workspace in its lane with its
   worktrees and agents, writes the projects' links into the board, and keeps lanes and project
   files in sync.
+- `skills/project-links`: a Claude Code skill that lets an agent keep a project's links.
 - `examples/`: a project file and a settings file to copy.
 
 The design is described in the [repository README](../../README.md#project-board).
@@ -19,6 +20,7 @@ Requires Go 1.24 or later and a running cmux.
 ```sh
 cd wheelhouse/board
 make install                      # builds bin/proj and links it into ~/.local/bin
+make install-skill                # optional: links the project-links skill into ~/.claude/skills
 
 mkdir -p ~/.config/wheelhouse/projects
 cp examples/project.yaml ~/.config/wheelhouse/projects/my-project.yaml   # then edit it
@@ -32,8 +34,9 @@ proj open my-project
 button's right-click menu, or run `cmux sidebar select projects-board`.
 
 The installed board is a copy of `sidebars/projects-board.js` with each project's links written
-into it, because a custom sidebar cannot read files. `proj open` and `proj adopt` rewrite it; run
-`proj sync` after editing a project's links, the browser profile, or the board script itself.
+into it, because a custom sidebar cannot read files. `proj open`, `proj adopt` and `proj link`
+rewrite it; run `proj sync` after editing a project file's links by hand, the settings, or the
+board script itself.
 
 `proj` drives whichever cmux `CMUX_BIN` names (default: `cmux` on `PATH`, else the installed app).
 For Wheelhouse IDE, point it at the app's CLI:
@@ -52,6 +55,11 @@ proj adopt <project>       turn the workspace you are in into the project's work
 proj ls                    projects with their lane, workspace and checkouts
 proj lane <project> <design|dev|review|release|done>
 proj lane pull             copy lane moves made on the board back into the project files
+proj link [<project>]      a project's links, one line per link kind
+proj link [<project>] <kind> <url>
+                           set a project's link of that kind
+proj link rm [<project>] <kind>
+                           remove it
 proj wt                    every project checkout per repository, with conflicts
 proj wt rm <project>       remove a project's worktrees (branches stay; refuses when dirty)
 proj check                 validate the project files
@@ -70,27 +78,48 @@ project's id on the command line; files starting with `_` are ignored.
 | `summary` | One line on the card |
 | `dir` | Workspace directory (default: the first repository's checkout) |
 | `repos` | Repositories: `path`, and optionally `branch`, `base`, `worktree` |
-| `links` | Pages shown as chips on the card: `title`, `url`, and optionally `icon` (an [SF Symbol](https://developer.apple.com/sf-symbols/) name such as `calendar`) |
+| `links` | Pages shown as chips on the card: `title` (a link kind), `url`, and optionally `icon` to replace the kind's |
 | `agents` | Terminals started with the workspace: `name`, `command`, optional `dir` |
 | `location`, `host` | `remote` opens the project as a `cmux ssh <host>` workspace |
 
 ## Links
 
-Each link is a chip on the project's card: an icon on every card, with the title on the selected
-one. Clicking a chip selects the project and shows the link's browser tab, opening it first if
+A project can carry one link of each **link kind**. The kinds are the `link_kinds` setting: by
+default PRD, Tech Solution, Tech Design, Tracker and Pipeline. In a project file a link's `title`
+names its kind; case, spaces and punctuation do not matter, so `tech design` and `tech-design` are
+the Tech Design kind. A link whose title is no kind stays in the file and off the board, and
+`proj check` says so.
+
+Each link is a chip on the project's card, named after its kind and shown in the order of the
+kinds. Clicking a chip selects the project and shows the link's browser tab, opening it first if
 needed: in the pane of the project's other link tabs, or in a new pane on the right for the first
 one, using the `browser_profile` setting. A chip is tinted while its tab is open. The chip's
 right-click menu closes the tab or opens the page in your default browser.
 
-Without an `icon`, the chip's icon follows the title: a ticket for titles with words such as
-"ticket", "issue" or "bug", a branch for "pipeline", "build", "release" or "review", a document for
-"doc", "design", "PRD" or "spec", and a link otherwise.
+To add, change or remove a link:
 
-Chips need a cmux whose custom sidebars support `fixedSize` and `cursor` (Wheelhouse IDE does). On
-an older cmux the board shows no chips, and the links are not opened for you.
+- **On the board:** right-click the card, open **Links** and pick a kind. A field appears on the
+  card; paste the address and press Return (Escape cancels). A chip's right-click menu has
+  **Change link…** and **Remove link**.
+- **From a terminal or an agent:** `proj link <kind> <url>` and `proj link rm <kind>`. Inside a
+  workspace that `proj open` created, the project is known; elsewhere name it first
+  (`proj link my-project prd https://…`). `make install-skill` gives Claude Code a skill that
+  uses these commands when you ask it to link a page to the project.
+- **By hand:** edit `links:` in the project file, then run `proj sync`.
 
-The board recognizes a link's tab by its name, which is the link's `title`. Keep titles distinct
-within a project, and do not rename those tabs. A title made only of digits is not supported.
+`proj link` edits the project file in place and keeps its comments and layout. It needs `links:`
+written as a list with one entry per line.
+
+A custom sidebar cannot write files, so the board saves a link by running `proj link` in a
+workspace of its own named "Saving link". It closes by itself after about a second; if the link
+could not be changed it stays open with the reason.
+
+Chips and the Links menu need a cmux whose custom sidebars support `fixedSize` and `cursor`
+(Wheelhouse IDE does). On an older cmux the board shows neither, and the links are not opened for
+you.
+
+The board recognizes a link's tab by its name, which is the kind's title, so do not rename those
+tabs. A kind title made only of digits is not supported.
 
 ## Worktrees
 
@@ -118,6 +147,13 @@ never switched or modified.
 | `agent_dir` | the workspace directory | `WHEELHOUSE_AGENT_DIR` |
 | `remote_host` | none | `WHEELHOUSE_REMOTE_HOST` |
 | `remote_agent_dir` | the workspace directory | `WHEELHOUSE_REMOTE_AGENT_DIR` |
+| `link_kinds` | PRD, Tech Solution, Tech Design, Tracker, Pipeline | none |
+
+`link_kinds` is a list of `title` and optional `icon`, an
+[SF Symbol](https://developer.apple.com/sf-symbols/) name such as `ticket`. Without an icon, one
+is chosen from the title: a ticket for words such as "ticket", "issue" or "bug", a branch for
+"pipeline", "build", "release" or "review", a document for "doc", "design", "PRD" or "spec", and a
+link otherwise.
 
 ## Notes
 

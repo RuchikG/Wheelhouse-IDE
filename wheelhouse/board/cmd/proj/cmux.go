@@ -52,6 +52,7 @@ func cmuxJSON(v any, args ...string) error {
 }
 
 type workspace struct {
+	ID          string `json:"id"`
 	Ref         string `json:"ref"`
 	Title       string `json:"title"`
 	CustomTitle string `json:"custom_title"`

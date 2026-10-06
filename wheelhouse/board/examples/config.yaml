@@ -4,3 +4,9 @@ browser_profile: work          # cmux browser profile for project tabs; default:
 agent_dir: ~/code              # where agents start; default: the workspace directory
 remote_host: build-box         # ssh destination for remote projects that name no host
 remote_agent_dir: ~/code       # where agents start on the remote host
+link_kinds:                    # the links a project can carry, in board order; default: these five
+  - {title: PRD, icon: doc.text}             # icon: an SF Symbol name; default: chosen from the title
+  - {title: Tech Solution, icon: lightbulb}
+  - {title: Tech Design, icon: square.and.pencil}
+  - {title: Tracker, icon: ticket}
+  - {title: Pipeline, icon: arrow.triangle.branch}
