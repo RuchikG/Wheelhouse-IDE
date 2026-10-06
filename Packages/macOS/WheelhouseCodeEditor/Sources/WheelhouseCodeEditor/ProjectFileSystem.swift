@@ -1,8 +1,9 @@
 import Foundation
 
-/// File access for a project editor: everything under the root can be listed,
-/// read and written; files elsewhere (a dependency's source, for example) can
-/// only be read.
+/// File access for an editor page. With a root (a project editor), everything
+/// under it can be listed, read and written, and files elsewhere (a
+/// dependency's source, for example) can only be read. Without one (a
+/// single-file editor), any file can be read and nothing else is allowed.
 struct ProjectFileSystem: Sendable {
     struct Entry: Equatable, Sendable {
         var name: String
@@ -28,13 +29,14 @@ struct ProjectFileSystem: Sendable {
     static let maximumFileSize = 8 * 1024 * 1024
     private static let hiddenNames: Set<String> = [".git", ".DS_Store"]
 
-    let root: String
+    let root: String?
 
-    init(root: String) {
-        self.root = URL(fileURLWithPath: root).resolvingSymlinksInPath().path
+    init(root: String?) {
+        self.root = root.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
     }
 
     func contains(_ path: String) -> Bool {
+        guard let root else { return false }
         let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
         return resolved == root || resolved.hasPrefix(root.hasSuffix("/") ? root : root + "/")
     }

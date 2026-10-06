@@ -63,8 +63,11 @@ runs `gopls -remote=auto`, a thin client of one shared gopls daemon, so open fil
 module share one loaded workspace. The project root is the nearest `go.work`, else `go.mod`, above
 the file. A jump to another file opens that file as a tab in the same pane.
 
-Not yet: a rename that would also change a file that is not open is refused as a whole, and the
-⌘-hover preview of a definition stays empty when its file is not open (the jump itself works).
+Files that are not open are read when the editor needs them: the ⌘-hover preview of a definition
+and the references list show them without opening a tab. In a folder tab, a rename that reaches
+other files opens them in the strip with the change unsaved, so you can look and save each one.
+A single-file tab holds only its own file, so there such a rename is refused as a whole with a
+note to open the folder.
 
 Other servers that speak LSP over standard input and output can be added, by file extension:
 

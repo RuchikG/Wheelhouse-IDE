@@ -138,14 +138,14 @@ import Testing
     @Test func listsFoldersFirstAndHidesGitData() throws {
         let (root, files) = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
-        #expect(try files.list(files.root).map(\.name) == ["cmd", "a2.txt", "a10.txt", "README.md"])
-        #expect(try files.list(files.root).first?.isDirectory == true)
+        #expect(try files.list(root.path).map(\.name) == ["cmd", "a2.txt", "a10.txt", "README.md"])
+        #expect(try files.list(root.path).first?.isDirectory == true)
     }
 
     @Test func readsAndSavesFilesInTheProject() throws {
         let (root, files) = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
-        let path = files.root + "/cmd/app/main.go"
+        let path = root.path + "/cmd/app/main.go"
         let file = try files.read(path)
         #expect(file.content == "package main\n")
         #expect(!file.isReadOnly)
@@ -156,7 +156,7 @@ import Testing
     @Test func refusesToSaveOverAChangeMadeElsewhere() throws {
         let (root, files) = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
-        let path = files.root + "/README.md"
+        let path = root.path + "/README.md"
         let file = try files.read(path)
         try Data("# changed elsewhere\n".utf8).write(to: URL(fileURLWithPath: path))
         try FileManager.default.setAttributes(
@@ -180,13 +180,26 @@ import Testing
             try files.write("package y\n", to: outside.path, expectedModified: nil)
         }
         #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.list(outside.deletingLastPathComponent().path) }
-        #expect(!files.contains(files.root + "-sibling/file.go"))
+        #expect(!files.contains(root.path + "-sibling/file.go"))
+    }
+
+    @Test func withoutAProjectFilesCanOnlyBeRead() throws {
+        let (root, _) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = ProjectFileSystem(root: nil)
+        let path = root.path + "/README.md"
+        #expect(try files.read(path).content == "# readme\n")
+        #expect(try files.read(path).isReadOnly)
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) {
+            try files.write("# mine\n", to: path, expectedModified: nil)
+        }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.list(root.path) }
     }
 
     @Test func refusesBinaryFiles() throws {
         let (root, files) = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
-        let path = files.root + "/image.bin"
+        let path = root.path + "/image.bin"
         try Data([0x89, 0x50, 0x00, 0x01]).write(to: URL(fileURLWithPath: path))
         #expect(throws: ProjectFileSystem.Failure.notText) { try files.read(path) }
     }

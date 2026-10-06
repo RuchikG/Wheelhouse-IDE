@@ -1,6 +1,14 @@
 import * as monaco from "monaco-editor";
 import { postToHost, type CodeEditorHostMessage, type CodeEditorOptions, type FileResult } from "./bridge";
-import { applyEditorOptions, applyEditorTheme, createMonacoEditor, reveal, startOf } from "./editorChrome";
+import {
+  applyEditorOptions,
+  applyEditorTheme,
+  createFileModels,
+  createMonacoEditor,
+  reveal,
+  startOf,
+} from "./editorChrome";
+import { HostRequests } from "./hostRequests";
 import { LanguageClients } from "./languageClient";
 
 type OpenFile = {
@@ -14,8 +22,6 @@ type OpenFile = {
   viewState: monaco.editor.ICodeEditorViewState | null;
   tab: HTMLElement;
 };
-
-type CloseChoice = "save" | "discard" | "cancel";
 
 const TREE_WIDTH_KEY = "wheelhouse.project.treeWidth";
 const TREE_INDENT = 14;
@@ -50,12 +56,16 @@ function failureText(name: string, error: string | undefined): string {
  */
 export class ProjectEditor {
   private readonly editor: monaco.editor.IStandaloneCodeEditor;
-  private readonly languageClients = new LanguageClients();
+  private readonly host = new HostRequests();
+  private readonly fileModels = createFileModels((path) => this.host.read(path));
+  // A rename that reaches into a file that is not open opens it, so its edits show as unsaved.
+  private readonly languageClients = new LanguageClients(async (file) => {
+    const loaded = file.scheme === "file" ? await this.loadFile(file.fsPath) : undefined;
+    return loaded !== undefined && !loaded.readOnly;
+  });
   private readonly files = new Map<string, OpenFile>();
   private readonly expanded = new Set<string>();
   private readonly rows = new Map<string, HTMLElement>();
-  private readonly pending = new Map<number, (result: unknown) => void>();
-  private nextRequest = 1;
   private root = "";
   private active: OpenFile | undefined;
   private tabWidth: number | undefined;
@@ -86,7 +96,7 @@ export class ProjectEditor {
     container.append(tree, resizer, main);
     this.installResizer(tree, resizer);
 
-    this.editor = createMonacoEditor(this.editorHost);
+    this.editor = createMonacoEditor(this.editorHost, this.fileModels);
     this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void this.saveActive());
     monaco.editor.registerEditorOpener({
       openCodeEditor: async (_source, resource, selectionOrPosition) => {
@@ -110,6 +120,9 @@ export class ProjectEditor {
   }
 
   receive(message: CodeEditorHostMessage): void {
+    if (this.host.receive(message)) {
+      return;
+    }
     switch (message.type) {
       case "project":
         this.root = message.root;
@@ -144,47 +157,7 @@ export class ProjectEditor {
       case "lsp":
         this.languageClients.receiveMessage(message.server, message.message);
         break;
-      case "fsResult":
-        this.resolve(message.id, message);
-        break;
-      case "confirmResult":
-        this.resolve(message.id, message.choice);
-        break;
-      case "document":
-        break;
     }
-  }
-
-  // Host requests
-
-  private resolve(id: number, result: unknown): void {
-    const resolve = this.pending.get(id);
-    this.pending.delete(id);
-    resolve?.(result);
-  }
-
-  private request<Result>(send: (id: number) => void): Promise<Result> {
-    const id = this.nextRequest++;
-    return new Promise((resolve) => {
-      this.pending.set(id, resolve as (result: unknown) => void);
-      send(id);
-    });
-  }
-
-  private list(path: string): Promise<FileResult> {
-    return this.request((id) => postToHost({ type: "fs", id, op: "list", path }));
-  }
-
-  private read(path: string): Promise<FileResult> {
-    return this.request((id) => postToHost({ type: "fs", id, op: "read", path }));
-  }
-
-  private write(path: string, content: string, modified: number | undefined): Promise<FileResult> {
-    return this.request((id) => postToHost({ type: "fs", id, op: "write", path, content, modified }));
-  }
-
-  private confirmClose(name: string): Promise<CloseChoice> {
-    return this.request((id) => postToHost({ type: "confirmClose", id, name }));
   }
 
   // File tree
@@ -211,7 +184,7 @@ export class ProjectEditor {
     into: DocumentFragment | HTMLElement,
     rows: Map<string, HTMLElement>,
   ): Promise<void> {
-    const result = await this.list(directory);
+    const result = await this.host.list(directory);
     for (const entry of result.entries ?? []) {
       const path = `${directory}/${entry.name}`;
       const isExpanded = entry.isDirectory && this.expanded.has(path);
@@ -280,15 +253,9 @@ export class ProjectEditor {
   // Open files
 
   private async openFile(path: string, position?: { line: number; column: number }): Promise<void> {
-    const name = path.slice(path.lastIndexOf("/") + 1);
-    let file = this.files.get(path);
+    const file = await this.loadFile(path);
     if (!file) {
-      const result = await this.read(path);
-      if (!result.ok || result.content === undefined) {
-        this.showNotice(failureText(name, result.error));
-        return;
-      }
-      file = this.files.get(path) ?? this.addFile(path, name, result);
+      return;
     }
     this.activate(file);
     if (position) {
@@ -296,9 +263,30 @@ export class ProjectEditor {
     }
   }
 
+  /** Adds the file to the strip without showing it. */
+  private async loadFile(path: string): Promise<OpenFile | undefined> {
+    const open = this.files.get(path);
+    if (open) {
+      return open;
+    }
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    const result = await this.host.read(path);
+    if (!result.ok || result.content === undefined) {
+      this.showNotice(failureText(name, result.error));
+      return undefined;
+    }
+    return this.files.get(path) ?? this.addFile(path, name, result);
+  }
+
   private addFile(path: string, name: string, result: FileResult): OpenFile {
     const uri = monaco.Uri.file(path);
-    const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(result.content ?? "", undefined, uri);
+    const content = result.content ?? "";
+    // A model can exist already: the editor loads one to preview a file that is not open.
+    const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, undefined, uri);
+    if (model.getValue() !== content) {
+      model.setValue(content);
+    }
+    this.fileModels.keep(uri.toString());
     if (this.tabWidth !== undefined) {
       model.updateOptions({ tabSize: this.tabWidth });
     }
@@ -354,7 +342,7 @@ export class ProjectEditor {
     if (this.isDirty(file)) {
       return;
     }
-    const result = await this.read(file.path);
+    const result = await this.host.read(file.path);
     if (!result.ok || result.content === undefined || this.isDirty(file) || !this.files.has(file.path)) {
       return;
     }
@@ -394,7 +382,7 @@ export class ProjectEditor {
       return;
     }
     const version = file.model.getAlternativeVersionId();
-    const result = await this.write(file.path, file.model.getValue(), file.modified);
+    const result = await this.host.write(file.path, file.model.getValue(), file.modified);
     if (result.ok) {
       file.savedVersion = version;
       file.modified = result.modified;
@@ -420,7 +408,7 @@ export class ProjectEditor {
 
   private async closeFile(file: OpenFile): Promise<void> {
     if (this.isDirty(file)) {
-      const choice = await this.confirmClose(file.name);
+      const choice = await this.host.confirmClose(file.name);
       if (choice === "cancel") {
         return;
       }
@@ -448,7 +436,7 @@ export class ProjectEditor {
         this.markActiveRow();
       }
     }
-    file.model.dispose();
+    this.fileModels.discard(file.model.uri.toString(), file.model);
     this.updateDirty(file);
   }
 

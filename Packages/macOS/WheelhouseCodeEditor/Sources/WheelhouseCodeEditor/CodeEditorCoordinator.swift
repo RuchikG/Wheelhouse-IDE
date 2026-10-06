@@ -191,14 +191,14 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         stopLanguageServers()
     }
 
-    // MARK: Project files
+    // MARK: Files
 
-    /// Answers a file request from the project page. File access runs off the
-    /// main thread; the reply carries the request's `id`.
+    /// Answers a file request from the page. File access runs off the main
+    /// thread; the reply carries the request's `id`.
     private func handleFileRequest(_ body: [String: Any]) {
-        guard let project, let id = body["id"] as? Int, let operation = body["op"] as? String,
+        guard let id = body["id"] as? Int, let operation = body["op"] as? String,
               let path = body["path"] as? String, path.hasPrefix("/") else { return }
-        let files = ProjectFileSystem(root: project.rootPath)
+        let files = ProjectFileSystem(root: project?.rootPath)
         let content = body["content"] as? String
         let expectedModified = body["modified"] as? Double
         let generation = pageGeneration

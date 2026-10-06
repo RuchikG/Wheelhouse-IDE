@@ -1,6 +1,12 @@
 import * as monaco from "monaco-editor";
 import { postToHost } from "./bridge";
-import { acceptUnopenedFiles, type DocumentBridge, type ServerRange } from "./unopenedFiles";
+import {
+  acceptUnopenedFiles,
+  editedFiles,
+  forgetVersionsOf,
+  type DocumentBridge,
+  type ServerRange,
+} from "./unopenedFiles";
 
 type Transport = ConstructorParameters<typeof monaco.lsp.MonacoLspClient>[0];
 type Message = Parameters<Transport["send"]>[0];
@@ -19,10 +25,17 @@ class HostTransport implements Transport {
   private readonly stateListeners = new Set<Listener<ConnectionState>>();
   /** Lowercased document URI to the URI as the file system spells it. */
   private readonly documentURIs = new Map<string, string>();
+  /** Ids of the rename requests that are waiting for their answer. */
+  private readonly renames = new Set<unknown>();
+  /** Settles when every message received so far has been handed to the client. */
+  private delivered: Promise<void> = Promise.resolve();
 
   readonly state: Transport["state"];
 
-  constructor(private readonly server: string) {
+  constructor(
+    private readonly server: string,
+    private readonly openForEdit: OpenForEdit,
+  ) {
     this.state = Object.defineProperties(
       {},
       {
@@ -42,6 +55,10 @@ class HostTransport implements Transport {
       return Promise.resolve();
     }
     this.restoreDocumentURICase(message);
+    const request = message as { id?: unknown; method?: string };
+    if (request.method === "textDocument/rename" && request.id !== undefined) {
+      this.renames.add(request.id);
+    }
     postToHost({ type: "lsp", server: this.server, json: JSON.stringify(message) });
     return Promise.resolve();
   }
@@ -103,12 +120,37 @@ class HostTransport implements Transport {
     }
   }
 
+  /**
+   * Hands a server message to the client, in arrival order. The answer to a
+   * rename first waits until the page holds every file it edits: Monaco applies
+   * edits to the models it has, and the page must be able to save them. When a
+   * file cannot be held the rename is given no result, because applying the
+   * rest would change some files and not others.
+   */
   receive(message: Message): void {
-    if (this.listener) {
-      this.listener(message);
-    } else {
-      this.unread.push(message);
-    }
+    this.delivered = this.delivered.then(async () => {
+      const answer = message as { id?: unknown; method?: string; result?: unknown };
+      if (answer.method === undefined && this.renames.delete(answer.id)) {
+        const unopened = new Set<string>();
+        let isHeld = true;
+        for (const uri of editedFiles(answer)) {
+          const file = monaco.Uri.parse(uri);
+          if (!monaco.editor.getModel(file)) {
+            unopened.add(uri);
+          }
+          isHeld = (await this.openForEdit(file).catch(() => false)) && isHeld;
+        }
+        forgetVersionsOf(answer, unopened);
+        if (!isHeld) {
+          answer.result = null;
+        }
+      }
+      if (this.listener) {
+        this.listener(message);
+      } else {
+        this.unread.push(message);
+      }
+    });
   }
 
   close(): void {
@@ -122,6 +164,9 @@ class HostTransport implements Transport {
     return `host language server (${this.server})`;
   }
 }
+
+/** Makes sure the page holds a file a rename edits. False when it cannot. */
+export type OpenForEdit = (file: monaco.Uri) => Promise<boolean>;
 
 /** Where an answer points when its file has no open document: the answer's own URI. */
 function locateUnopenedFile(uri: string, range: ServerRange) {
@@ -138,6 +183,8 @@ function locateUnopenedFile(uri: string, range: ServerRange) {
 export class LanguageClients {
   private readonly transports = new Map<string, HostTransport>();
   private readonly requested = new Set<string>();
+
+  constructor(private readonly openForEdit: OpenForEdit) {}
 
   /** Asks the host for the server that handles `path`, once per kind of file. */
   ensureFor(path: string): void {
@@ -156,7 +203,7 @@ export class LanguageClients {
 
   receiveState(server: string, state: "open" | "closed" | "unavailable"): void {
     if (state === "open" && !this.transports.has(server)) {
-      const transport = new HostTransport(server);
+      const transport = new HostTransport(server, this.openForEdit);
       this.transports.set(server, transport);
       const client = new monaco.lsp.MonacoLspClient(transport);
       const bridge = (client as unknown as { _bridge?: DocumentBridge<ReturnType<typeof locateUnopenedFile>> })._bridge;

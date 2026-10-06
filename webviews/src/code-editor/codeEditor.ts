@@ -1,6 +1,15 @@
 import * as monaco from "monaco-editor";
 import { postToHost, type CodeEditorHostMessage, type CodeEditorOptions } from "./bridge";
-import { applyEditorOptions, applyEditorTheme, createMonacoEditor, reveal, startOf } from "./editorChrome";
+import {
+  applyEditorOptions,
+  applyEditorTheme,
+  createFileModels,
+  createMonacoEditor,
+  reveal,
+  showMessageAtCursor,
+  startOf,
+} from "./editorChrome";
+import { HostRequests } from "./hostRequests";
 import { LanguageClients } from "./languageClient";
 
 const CHANGE_DEBOUNCE_MS = 120;
@@ -12,14 +21,23 @@ const CHANGE_DEBOUNCE_MS = 120;
  */
 export class CodeEditor {
   private readonly editor: monaco.editor.IStandaloneCodeEditor;
-  private readonly languageClients = new LanguageClients();
+  private readonly host = new HostRequests();
+  private readonly fileModels = createFileModels((path) => this.host.read(path));
+  // This page holds one file, so a rename that reaches into another cannot be applied here.
+  private readonly languageClients = new LanguageClients(async (file) => {
+    if (file.toString() === this.editor.getModel()?.uri.toString()) {
+      return true;
+    }
+    showMessageAtCursor(this.editor, "This also changes other files. Open the folder in an editor tab to apply it.");
+    return false;
+  });
   private documentSequence = 0;
   private applyingHostDocument = false;
   private pendingChange: ReturnType<typeof setTimeout> | undefined;
   private tabWidth: number | undefined;
 
   constructor(container: HTMLElement) {
-    this.editor = createMonacoEditor(container);
+    this.editor = createMonacoEditor(container, this.fileModels);
     this.editor.onDidChangeModelContent(() => {
       if (!this.applyingHostDocument) {
         this.scheduleChange();
@@ -39,6 +57,9 @@ export class CodeEditor {
   }
 
   receive(message: CodeEditorHostMessage): void {
+    if (this.host.receive(message)) {
+      return;
+    }
     switch (message.type) {
       case "document":
         this.applyDocument(message.path, message.content, message.sequence, message.readOnly);
@@ -92,8 +113,11 @@ export class CodeEditor {
       if (this.tabWidth !== undefined) {
         model.updateOptions({ tabSize: this.tabWidth });
       }
+      this.fileModels.keep(uri.toString());
       this.editor.setModel(model);
-      current?.dispose();
+      if (current) {
+        this.fileModels.discard(current.uri.toString(), current);
+      }
       this.languageClients.ensureFor(path);
     } finally {
       this.applyingHostDocument = false;
