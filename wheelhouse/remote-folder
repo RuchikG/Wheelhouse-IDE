@@ -1,8 +1,8 @@
 #!/bin/sh
 # Opens a folder on a remote host as an editor tab in the running Wheelhouse IDE.
 # The host is anything `ssh <host>` reaches without asking for a password.
-#   wheelhouse/remote-folder devbox '~/src/project'
-#   wheelhouse/remote-folder devbox /srv/app --workspace workspace:3
+#   wheelhouse/remote-folder myhost '~/src/project'
+#   wheelhouse/remote-folder myhost /srv/app --workspace workspace:3
 set -eu
 . "$(dirname "$0")/lib.sh"
 [ $# -ge 2 ] || { echo "usage: wheelhouse/remote-folder <host> <folder> [--workspace <id>]" >&2; exit 2; }
