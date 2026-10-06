@@ -43,7 +43,7 @@ DONE              —
 - **Language servers.** Completion, hover, go to definition, references, rename and diagnostics.
   Go works out of the box with `gopls`; any other LSP server can be added with one setting.
 - **Remote hosts.** Open a folder on another machine over SSH. Files are edited and saved there,
-  and the language server runs there. The host needs only `python3`; nothing is installed on it.
+  and the language server runs there. For this the host needs only `python3`.
 - **Agent notifications from SSH hosts.** A small Claude Code hook tells you when an agent on a
   remote machine needs input or has finished.
 - **Everything in cmux.** Workspaces, splits, notifications, the in-app browser and the `cmux`
@@ -52,29 +52,29 @@ DONE              —
 
 ## Install
 
-Wheelhouse IDE is built from source for now. You need macOS 14 or later, Xcode 26 or later with
-the Metal toolchain component, Zig and Rust.
+1. Download `Wheelhouse-IDE-<version>-macos-universal.zip` from the
+   [latest release](https://github.com/RuchikG/Wheelhouse-IDE/releases/latest) and unzip it.
+2. Move `Wheelhouse IDE.app` to your Applications folder and open it.
+3. macOS blocks it the first time, because the build is not signed with an Apple Developer ID.
+   Open System Settings → Privacy & Security, find the message about Wheelhouse IDE and click
+   "Open Anyway".
 
-```sh
-git clone https://github.com/RuchikG/Wheelhouse-IDE.git
-cd Wheelhouse-IDE
-./scripts/setup.sh
-wheelhouse/build.sh     # first build: around 25 minutes
-wheelhouse/open.sh
-```
+It needs macOS 14 or later and runs on Apple silicon and Intel. The app has its own settings and
+runs next to an installed cmux without touching it.
 
-The app has its own settings and runs next to an installed cmux without touching it. See
-[Building from source](wheelhouse/docs/building.md) for details.
+To build it yourself, see [Building from source](wheelhouse/docs/building.md).
 
 ## Getting started
 
 1. **Open a folder.** Click the curly-braces button at the top right of a pane and choose
    "Open Folder…". The folder opens as a tab with its file tree.
-2. **Set up the board.** Install `proj`, the small command that creates the lanes and opens
-   projects, then describe each project in a short file:
+2. **Set up the board.** In a terminal inside the app, run `proj init`. It creates the lanes and
+   a folder for your project files with a template to copy:
    [board set-up](wheelhouse/board/README.md).
-3. **Work on a remote host.** `wheelhouse/remote-folder <host> <folder>` opens a folder from any
-   machine that `ssh <host>` reaches.
+3. **Work on a remote host.** Run `cmux ssh <host>` in the app to open a workspace on that
+   machine (this installs cmux's remote daemon there), then choose "Open Folder…": it asks for
+   a path on the host. If the connection fails, see
+   [Folders on a remote host](wheelhouse/docs/editor.md#folders-on-a-remote-host).
 4. **Agent status from remote hosts (optional).** cmux can show whether the agents in a
    `cmux ssh` workspace are working or waiting for you. That needs its hooks in the host's
    Claude Code and Codex settings, so Wheelhouse IDE leaves it off until you ask:
@@ -85,8 +85,7 @@ The app has its own settings and runs next to an installed cmux without touching
 
    Read [what it changes on the host](wheelhouse/docs/fork.md#agent-hooks-on-ssh-hosts) first.
 
-`wheelhouse/cli` is the `cmux` command pointed at this app, for example
-`wheelhouse/cli open path/to/file.go`.
+The `cmux` command works in the app's terminals as it does in cmux.
 
 ## Documentation
 

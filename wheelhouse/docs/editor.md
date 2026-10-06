@@ -68,6 +68,16 @@ and tools. The tree shows the host's name next to the folder's.
   until the tab is reopened.
 - Single remote files opened from the Files sidebar are still read-only previews.
 
+`cmux ssh` is cmux's own feature and installs its remote daemon on the host. On some hosts it
+fails with "secure directory … has an ancestor not controlled by root or the effective user":
+the home folder there sits under a folder owned by another account, which the daemon refuses
+for its state. Give it a folder that passes the check with one line in `~/.pam_environment` on
+the host, then connect again:
+
+```
+CMUX_REMOTE_STATE_DIR DEFAULT=/var/tmp/cmux-remote-<your user name>
+```
+
 ## Language servers
 
 Go files get completion, hover, go to definition, find references, rename, formatting and
