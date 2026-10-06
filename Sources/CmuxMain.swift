@@ -21,6 +21,7 @@ enum CmuxMain {
         // First: nothing may read preferences before an app-host test process
         // switches to its own domain.
         TestProcessDefaults.installIfHostingTests()
+        WheelhouseDefaults.register()
         FileDescriptorLimitController().raiseSoftLimitIfNeeded()
         AppHostProcessReceipt.writeIfRequired()
 #if DEBUG

@@ -4159,6 +4159,7 @@
 		A10020000000000000000011 /* WebSurfaceSelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10020000000000000000012 /* WebSurfaceSelectionReader.swift */; };
 		E1C0DE00000000000000E103 /* WheelhouseCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0DE00000000000000E102 /* WheelhouseCodeEditor */; };
 		E1C0DE00000000000000E104 /* WheelhouseCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0DE00000000000000E102 /* WheelhouseCodeEditor */; };
+		E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */; };
 		A500120C /* WindowAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001222 /* WindowAccessor.swift */; };
 		063BC42CEE257D6213A2E30C /* WindowAndDragTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */; };
 		A59170000000000000000001 /* WindowAppearanceSnapshotPaneBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A59170000000000000000002 /* WindowAppearanceSnapshotPaneBackgroundTests.swift */; };
@@ -8541,6 +8542,7 @@
 		9F63189EE1BF0052D9BDC241 /* WebKitBrowserReplDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserRepl/WebKitBrowserReplDriver.swift; sourceTree = "<group>"; };
 		A1002000000000000000001A /* WebSurfaceSelectionEvaluationOwner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/WebSurfaceSelectionEvaluationOwner.swift; sourceTree = "<group>"; };
 		A10020000000000000000012 /* WebSurfaceSelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/WebSurfaceSelectionReader.swift; sourceTree = "<group>"; };
+		E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseDefaults.swift; sourceTree = "<group>"; };
 		A5001222 /* WindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAccessor.swift; sourceTree = "<group>"; };
 		BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAndDragTests.swift; sourceTree = "<group>"; };
 		A59170000000000000000002 /* WindowAppearanceSnapshotPaneBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearanceSnapshotPaneBackgroundTests.swift; sourceTree = "<group>"; };
@@ -9756,6 +9758,7 @@
 				D0B103000000000000000001 /* AboutWindowController.swift */,
 				257DFD20F0961FE0BDAF70F2 /* TelemetrySettings.swift */,
 				C12289000000000000000002 /* CmuxMain.swift */,
+				E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */,
 				875200000000000000000002 /* cmuxApp+SurfaceNavigationMenu.swift */,
 				C51A73000000000000000014 /* CmuxWorkerEntrypoint.swift */,
 				80410000000000000000000E /* cmuxApp+WorkspaceCommandHelpers.swift */,
@@ -16634,6 +16637,7 @@
 				C7B206ECEE3E020A96259AFF /* WebKitBrowserReplDriver.swift in Sources */,
 				A10020000000000000000019 /* WebSurfaceSelectionEvaluationOwner.swift in Sources */,
 				A10020000000000000000011 /* WebSurfaceSelectionReader.swift in Sources */,
+				E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */,
 				A500120C /* WindowAccessor.swift in Sources */,
 				9065A0020000000000000001 /* WindowAppKitCapture.swift in Sources */,
 				A5001900A1B2C3D4E5F60718 /* WindowBackgroundComposition.swift in Sources */,

@@ -66,7 +66,11 @@ final class SSHTuiWorkspaceCoordinator {
         guard let clientURL = clientURL() else { throw CloudMachineLink.LinkError.clientMissing }
         let links = SSHTuiLinkManager(connection: connection, clientURL: clientURL, paths: paths,
                                      isEnabled: { ManagedRemoteConnectionsPolicy.isEnabled },
-                                     agentHookProviders: { SSHTuiConnection.agentHookProviders(defaults: .standard) })
+                                     agentHookProviders: {
+                                         // Wheelhouse: a host's agent settings are changed only on request.
+                                         WheelhouseDefaults.installsRemoteAgentHooks
+                                             ? SSHTuiConnection.agentHookProviders(defaults: .standard) : []
+                                     })
         let provider = CmuxTuiSurfaceProvider(summary: .ssh(connection), links: links, catalog: catalog)
         catalog.register(provider)
         return provider

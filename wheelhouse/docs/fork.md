@@ -6,12 +6,36 @@ mergeable with upstream.
 
 ## Nothing reported to cmux
 
-`wheelhouse/defaults.sh` also turns off "Send anonymous telemetry". In cmux that setting stops
+Wheelhouse IDE starts with "Send anonymous telemetry" off. In cmux that setting stops
 usage analytics and crash reports but still asks cmux's feature-flag service for flag values every
 30 minutes. In this fork it stops that request too: with telemetry off, flags use their built-in
 defaults and local overrides. A fork has no business in cmux's analytics or crash reports, and its
 bundle id still starts with cmux's, so cmux's own check for foreign builds would not have caught
 it. Turn the setting back on in Settings to get upstream's behavior.
+
+## Agent hooks on SSH hosts
+
+When cmux attaches to a host with `cmux ssh`, it installs hooks in that host's Claude Code and
+Codex settings (`~/.claude/settings.json`, `~/.codex/hooks.json`), one per agent event, so that
+agents running there report their state to the sidebar. Wheelhouse IDE does not do this unless
+you turn it on, because it changes files that every agent session on the host reads:
+
+```sh
+defaults write <bundle id> wheelhouse.remoteAgentHooks.enabled -bool true
+```
+
+The bundle id is `com.cmuxterm.app.staging.wheelhouse` for a downloaded build and
+`com.cmuxterm.app.debug.<tag>` for a source build. The setting takes effect the next time a host
+is attached. Which agents get hooks follows Settings → Integrations, as in cmux.
+
+The hooks do nothing outside cmux and tmux sessions, with one exception seen with Claude Code
+2.1: the hook on worktree creation makes `claude --worktree` fail on the host with "WorktreeCreate
+hook failed". If you use worktrees there, remove the `WorktreeCreate` entry from the host's
+`~/.claude/settings.json` after attaching, or leave the setting off. Turning the setting off
+later stops new installs; it does not remove hooks already on a host.
+
+Notifications from agents on SSH hosts do not need any of this; they use the small hook in
+[`wheelhouse/remote-notify`](../remote-notify/README.md).
 
 ## Naming and icon
 
@@ -45,7 +69,8 @@ nightly and RC icon sets are still cmux's.
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
 | `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
-| `wheelhouse/defaults.sh` | Preferences the build applies on top of cmux's defaults |
+| `Sources/WheelhouseDefaults.swift` | Preferences the app starts with on top of cmux's defaults |
+| `wheelhouse/release.sh` | Builds the app that is handed to other people |
 | `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE, and the icon source |
 
 After changing anything under `webviews/`, regenerate the bundle:
@@ -65,8 +90,10 @@ errors and failed asset loads are logged under the `wheelhouse.code-editor` subs
 
 cmux moves quickly, so the fork keeps its changes small: new code goes in its own package and
 files, and upstream files are touched only where the editor hooks in (the file panel, the app's
-key monitor, the built-in tab bar actions) and for the one-line telemetry rule in
-`Sources/FeatureFlags.swift`. The tab right-click menu is built by the Bonsplit submodule, which
+key monitor, the built-in tab bar actions), for the one-line telemetry rule in
+`Sources/FeatureFlags.swift`, for one line in `Sources/CmuxMain.swift` that registers the
+fork's preferences, and for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift`
+that makes agent hooks on SSH hosts opt-in. The tab right-click menu is built by the Bonsplit submodule, which
 this fork does not modify: the editor item is added to that menu when it opens. `upstream` is
 `manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
 files most likely to conflict; keep the fork's README, regenerate the bundle after a merge, and rerun

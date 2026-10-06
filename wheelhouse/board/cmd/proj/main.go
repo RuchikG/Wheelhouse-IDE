@@ -13,7 +13,8 @@ import (
 
 const usage = `proj - project workspaces on cmux
 
-  proj init                  create the lane groups, the browser profile and install the board sidebar
+  proj init                  create the lane groups, the browser profile and install the board sidebar;
+                             the first time, also create <home>/projects with a template
   proj sync                  write the projects' links into the installed board again
   proj ls                    list projects with their lane, workspace and checkouts
   proj open <project> [--focus]
@@ -54,6 +55,11 @@ func main() {
 }
 
 func run(cmd string, args []string) error {
+	if cmd == "init" {
+		if err := ensureHome(); err != nil {
+			return err
+		}
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
@@ -99,6 +105,10 @@ func cmdInit(cfg *config, all []*Manifest) error {
 	}
 	fmt.Println("board installed:", dst)
 	fmt.Println("show it with the sidebar button's right-click menu, or: cmux sidebar open projects-board")
+	if len(all) == 0 {
+		example := filepath.Join(cfg.home, "projects", "_example.yaml")
+		fmt.Printf("no projects yet: copy %s to <name>.yaml next to it, edit it, then run: proj open <name>\n", example)
+	}
 	return nil
 }
 

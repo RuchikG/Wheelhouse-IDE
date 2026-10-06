@@ -15,19 +15,29 @@ The design is described in [Project board](../docs/board.md).
 
 ## Set up
 
-Requires Go 1.24 or later and a running cmux.
+In Wheelhouse IDE, `proj` is part of the app: open a terminal in it and run
+
+```sh
+proj init                         # lanes, the board sidebar, and ~/.config/wheelhouse/projects
+```
+
+The first run creates `~/.config/wheelhouse/projects` with a commented template,
+`_example.yaml`. Copy it to `my-project.yaml` next to it, edit it, then:
+
+```sh
+proj open my-project
+```
+
+Settings are optional; copy [`examples/config.yaml`](examples/config.yaml) to
+`~/.config/wheelhouse/config.yaml` to change them.
+
+To use the board with stock cmux, or to work on `proj` itself, build it from this folder
+(Go 1.24 or later):
 
 ```sh
 cd wheelhouse/board
 make install                      # builds bin/proj and links it into ~/.local/bin
 make install-skill                # optional: links the project-links skill into ~/.claude/skills
-
-mkdir -p ~/.config/wheelhouse/projects
-cp examples/project.yaml ~/.config/wheelhouse/projects/my-project.yaml   # then edit it
-cp examples/config.yaml ~/.config/wheelhouse/config.yaml                 # optional
-
-proj init                         # lane groups + the board sidebar
-proj open my-project
 ```
 
 `proj init` writes the board to `~/.config/cmux/sidebars`. Pick `projects-board` from the sidebar
@@ -39,7 +49,8 @@ rewrite it; run `proj sync` after editing a project file's links by hand, the se
 board script itself.
 
 `proj` drives whichever cmux `CMUX_BIN` names (default: `cmux` on `PATH`, else the installed app).
-For Wheelhouse IDE, point it at the app's CLI:
+Inside a Wheelhouse IDE terminal that is the app itself. From any other terminal, point it at a
+source build's CLI:
 
 ```sh
 CMUX_BIN=$PWD/../cli proj init

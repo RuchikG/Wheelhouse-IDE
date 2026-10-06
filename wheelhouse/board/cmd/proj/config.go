@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	boardfiles "github.com/RuchikG/Wheelhouse-IDE/wheelhouse/board"
 )
 
 type config struct {
@@ -41,13 +43,34 @@ func configHome() (string, error) {
 	return filepath.Join(home, ".config", "wheelhouse"), nil
 }
 
+// ensureHome creates the projects directory on first use and leaves a template to copy.
+func ensureHome() error {
+	home, err := configHome()
+	if err != nil {
+		return err
+	}
+	projects := filepath.Join(home, "projects")
+	if _, err := os.Stat(projects); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(projects, 0o755); err != nil {
+		return err
+	}
+	template := filepath.Join(projects, "_example.yaml")
+	if err := os.WriteFile(template, []byte(boardfiles.ExampleProject), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("created", projects)
+	return nil
+}
+
 func loadConfig() (*config, error) {
 	home, err := configHome()
 	if err != nil {
 		return nil, err
 	}
 	if st, err := os.Stat(filepath.Join(home, "projects")); err != nil || !st.IsDir() {
-		return nil, fmt.Errorf("no projects/ directory in %s; create it or set WHEELHOUSE_HOME", home)
+		return nil, fmt.Errorf("no projects/ directory in %s; run `proj init` or set WHEELHOUSE_HOME", home)
 	}
 
 	var file configFile

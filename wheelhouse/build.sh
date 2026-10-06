@@ -15,7 +15,8 @@ export CMUX_DEV_CLOUD_ENABLED="${CMUX_DEV_CLOUD_ENABLED:-0}"
 
 [ -d "$WHEELHOUSE_APP_PATH" ] || { echo "build did not produce $WHEELHOUSE_APP_PATH" >&2; exit 1; }
 python3 "$WHEELHOUSE_ROOT/wheelhouse/brand/apply.py" "$WHEELHOUSE_APP_PATH"
-# The string tables are sealed resources; sign again the way reload.sh does.
+wheelhouse_bundle_board "$WHEELHOUSE_APP_PATH"
+# The string tables and the added files are sealed resources; sign again the way reload.sh does.
 /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der "$WHEELHOUSE_APP_PATH"
 "$WHEELHOUSE_ROOT/wheelhouse/defaults.sh"
 echo "Wheelhouse IDE: $WHEELHOUSE_APP_PATH (open it with wheelhouse/open.sh)"

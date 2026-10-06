@@ -75,6 +75,15 @@ The app has its own settings and runs next to an installed cmux without touching
    [board set-up](wheelhouse/board/README.md).
 3. **Work on a remote host.** `wheelhouse/remote-folder <host> <folder>` opens a folder from any
    machine that `ssh <host>` reaches.
+4. **Agent status from remote hosts (optional).** cmux can show whether the agents in a
+   `cmux ssh` workspace are working or waiting for you. That needs its hooks in the host's
+   Claude Code and Codex settings, so Wheelhouse IDE leaves it off until you ask:
+
+   ```sh
+   defaults write com.cmuxterm.app.staging.wheelhouse wheelhouse.remoteAgentHooks.enabled -bool true
+   ```
+
+   Read [what it changes on the host](wheelhouse/docs/fork.md#agent-hooks-on-ssh-hosts) first.
 
 `wheelhouse/cli` is the `cmux` command pointed at this app, for example
 `wheelhouse/cli open path/to/file.go`.
