@@ -1,136 +1,17 @@
-# Wheelhouse
+<p align="center">
+  <img src="wheelhouse/brand/icon/wheelhouse-ide-dark.svg" width="128" alt="Wheelhouse IDE icon">
+</p>
 
-Wheelhouse is a fork of [cmux](https://github.com/manaflow-ai/cmux), the Ghostty-based macOS
-terminal for AI coding agents. The goal is to run every project you have in flight from one
-window: a board of projects, and for each project a workspace with its terminals, agents, browser
-tabs and code. It adds three things to cmux: a project board, a built-in code editor, and
-notifications from agents running on SSH hosts.
+<h1 align="center">Wheelhouse IDE</h1>
 
-This is an early personal fork. It is not affiliated with or supported by Manaflow, and there are
-no packaged releases; you build it from source. Everything cmux does (workspaces, splits,
-notifications, the in-app browser, the CLI, remote workspaces) works as it does upstream, and the
-[cmux documentation](https://cmux.com/docs/getting-started) applies.
+<p align="center">
+  One window for every project you have in flight:<br>
+  a board of projects, and for each one a workspace with its terminals, AI coding agents, browser tabs and code.
+</p>
 
-## What Wheelhouse adds
-
-### Code editor
-
-Text files open in a [Monaco](https://microsoft.github.io/monaco-editor/) editor (the editor
-from VS Code) instead of cmux's native text view. It lives inside the existing file panel, so
-opening files from the file explorer or `cmux open <file>`, the dirty marker, save and revert,
-reload when the file changes on disk, and session restore all work as before.
-
-- Syntax highlighting for about 80 languages, loaded on demand.
-- Monaco's editing features: multiple cursors, find and replace, folding, minimap, bracket matching.
-- Save with ⌘S or the panel's save button.
-- While the editor has keyboard focus, ⌘F (find in file), ⌘D (add the next occurrence to the
-  selection) and ⌘/ (toggle line comment) go to the editor. Everywhere else they keep their cmux
-  meaning, for example ⌘D splits the pane.
-- A new-editor-tab button (curly braces) sits next to the new-terminal and new-browser buttons at
-  the top right of every pane. It offers "New Untitled File", "Open File…" and "Open Folder…"; a
-  file that is already open is focused instead of opened twice. A tab's right-click menu has the
-  same choices under "New Editor Tab to Right". The button is the built-in action
-  `wheelhouse.newEditor`, so it can be placed or removed like any other tab bar button in
-  `cmux.json`.
-- An untitled file asks where to save the first time you save it, and the tab then becomes that
-  file. Its text is not kept if the app quits before that.
-- Follows the panel's light or dark colors and the existing `fileEditor.*` settings (word wrap,
-  line numbers, indent guides, current-line highlight, tab width).
-
-#### Folder tabs
-
-"Open Folder…" opens a folder as one tab that works like a small editor window: the folder's file
-tree on the left, a strip of the files you have opened from it, and the editor.
-
-- Folders load when expanded. `.git` is hidden. The tree and the open file are refreshed when the
-  window regains focus, and with the ↻ button.
-- Right-click in the tree for New File…, New Folder…, Rename… and Move to Trash. Names are typed
-  in place: Return accepts, Escape gives up. An open file follows its rename, unsaved edits
-  included; a file moved to the Trash leaves the strip.
-- "Find file" above the tree lists the files whose path contains every word you type, names
-  first. ↑ and ↓ move, Return opens, Escape clears. `.git` and `node_modules` are left out, and a
-  folder with more than 20,000 files is searched only in part.
-- The files a folder had open, and which one was showing, come back when the folder is opened
-  again, also after a restart. Unsaved edits do not.
-- A folder tab keeps its open files and unsaved edits while another workspace is showing.
-- ⌘S saves the open file. A dot marks a file with unsaved edits, and the tab itself shows one
-  while any file has them. Closing such a file asks whether to save.
-- If something else (an agent, a terminal command) changed a file after it was opened here, saving
-  asks before overwriting. A file with no unsaved edits just picks up the change.
-- Go to definition and similar jumps open the target inside the same tab. Files outside the
-  folder, such as a dependency's source, open read-only.
-- The language server is rooted at the folder and shared by every file in the tab.
-
-From a script, `wheelhouse/cli rpc file.open '{"paths":["/path/to/folder"]}'` opens a folder tab.
-
-#### Folders on a remote host
-
-A folder tab can show a folder on another machine. Its files are read, edited and saved there,
-and the language server runs there, so definitions and diagnostics follow that machine's code
-and tools. The tree shows the host's name next to the folder's.
-
-- In a workspace connected to a host with `cmux ssh`, "Open Folder…" asks for a path on that
-  host (`~` works), starting from the terminal's directory.
-- From a shell, `wheelhouse/remote-folder <host> <folder>` opens one in any workspace. The host is
-  whatever `ssh <host>` reaches without asking for a password.
-- The editor keeps one `ssh` connection open per folder tab and runs a small Python program
-  over it that answers its file requests, so an operation costs one round trip instead of a new
-  connection. The host needs `python3` (3.6 or later); nothing is installed on it. A second
-  connection carries the language server, started through your login shell there so that tools
-  on your own `PATH` (`~/go/bin`, for example) are found.
-- There is no Trash on a remote host: the tree's menu says "Delete…" and deleting is final.
-- If the connection drops, the next file operation opens a new one. Language features stay off
-  until the tab is reopened.
-- Single remote files opened from the Files sidebar are still read-only previews.
-
-#### Language servers
-
-Go files get completion, hover, go to definition, find references, rename, formatting and
-diagnostics from [gopls](https://go.dev/gopls/), when `gopls` is installed (`go install
-golang.org/x/tools/gopls@latest`). The app looks for it on your login shell's `PATH`. Each editor
-runs `gopls -remote=auto`, a thin client of one shared gopls daemon, so open files of the same
-module share one loaded workspace. The project root is the nearest `go.work`, else `go.mod`, above
-the file. A jump to another file opens that file as a tab in the same pane.
-
-Files that are not open are read when the editor needs them: the ⌘-hover preview of a definition
-and the references list show them without opening a tab. In a folder tab, a rename that reaches
-other files opens them in the strip with the change unsaved, so you can look and save each one.
-A single-file tab holds only its own file, so there such a rename is refused as a whole with a
-note to open the folder.
-
-Other servers that speak LSP over standard input and output can be added, by file extension:
-
-```sh
-defaults write <bundle id> wheelhouse.languageServers -dict-add rs \
-  '{ command = ("rust-analyzer"); rootMarkers = ("Cargo.toml"); }'
-```
-
-An entry with an empty `command` turns a built-in server off. Server start-up and failures are
-logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
-
-Not there yet:
-
-- A folder tab cannot search inside files or move a file to another folder, and it does not
-  remember which folders were expanded.
-- If a language server exits, its features stay off in that tab until the tab is reopened.
-- A remote file opened on its own (from the Files sidebar, or by ⌘-clicking a path in a remote
-  terminal) is a copy, as in cmux: it is not saved back. Open its folder instead.
-- A remote folder tab does not notice a file changed on the host until the file is opened or
-  the window regains focus, and it refuses to overwrite such a change without asking.
-- Markdown source editing still uses the native editor.
-- Other editor shortcuts that overlap an app shortcut still go to the app.
-
-To go back to the native editor:
-
-```sh
-defaults write <bundle id> wheelhouse.codeEditor.enabled -bool false
-```
-
-The bundle id is `com.cmuxterm.app.debug.<tag>`, so `com.cmuxterm.app.debug.wheelhouse` by default.
-
-### Project board
-
-A kanban board of projects in the left sidebar, replacing the flat workspace list.
+Wheelhouse IDE is a macOS app built on [cmux](https://github.com/manaflow-ai/cmux), the
+Ghostty-based terminal for AI coding agents. It keeps everything cmux does and adds a project
+board, a code editor with language servers, and editing on remote hosts.
 
 ```
 Projects
@@ -149,79 +30,30 @@ RELEASE           1
 DONE              —
 ```
 
-How it maps onto cmux:
+## Features
 
-| Board | cmux |
-| --- | --- |
-| Project (a card) | A workspace: its directory, terminals, agents and browser tabs |
-| Lane | A workspace group. Moving a card moves the workspace between groups |
-| Card details | The workspace's description, git branch and pull request, agents and their status, unread notifications, progress |
-| The board itself | A [custom sidebar](docs/custom-sidebars.md) script |
+- **Project board.** A kanban board in the sidebar: one card per project, in lanes from Design to
+  Done. A card shows its branch and pull request, how many agents are running and how many are
+  waiting on you, and links to the project's documents. Click a card to jump into its workspace.
+- **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
+  editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
+  replace, folding and a minimap.
+- **Folder tabs.** Open a folder as one tab with a file tree, a strip of open files, file search
+  by name, and create, rename and delete from the tree.
+- **Language servers.** Completion, hover, go to definition, references, rename and diagnostics.
+  Go works out of the box with `gopls`; any other LSP server can be added with one setting.
+- **Remote hosts.** Open a folder on another machine over SSH. Files are edited and saved there,
+  and the language server runs there. The host needs only `python3`; nothing is installed on it.
+- **Agent notifications from SSH hosts.** A small Claude Code hook tells you when an agent on a
+  remote machine needs input or has finished.
+- **Everything in cmux.** Workspaces, splits, notifications, the in-app browser and the `cmux`
+  command work as they do upstream, and the
+  [cmux documentation](https://cmux.com/docs/getting-started) applies.
 
-Design:
+## Install
 
-- **Five lanes:** Design, Dev, Review & Test, Release, Done. A project moves left to right over
-  its life; lanes are set by hand.
-- **A card shows what needs you.** Status dot, one-line summary, branch (with a dirty marker) and
-  pull request, how many agents are running and how many are waiting on you, unread count, a
-  badge for projects on a remote host, and a progress bar.
-- **Waiting-on-you first.** Within a lane, projects with an agent waiting for input sort to the
-  top, then projects with unread notifications.
-- **Click to jump.** Clicking a card selects the project's workspace, and goes straight to the
-  agent that is waiting if there is one. Right-click moves the card to another lane or marks it
-  read.
-- **Links are chips on the card,** not tabs that stay open. A project carries one link of each
-  kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
-  pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip
-  opens the page as a browser tab in the project's workspace, or shows the tab if it is already
-  open; an open link's chip is tinted. Close the tab when you are done, from the tab or from the
-  chip's right-click menu, and the chip stays for next time.
-- **Links are added where you are.** Right-click a card, pick the kind under Links and paste the
-  address into the field that appears on the card; a chip's own menu changes or removes its
-  link. From a terminal or an agent, `proj link <kind> <url>` does the same for the project of
-  the workspace it runs in, and a Claude Code skill tells the agent so.
-- **Beyond links, the board only reads state and jumps.** Work happens in the project's workspace:
-  in its terminals and agents, in the real web tools opened as browser tabs, and in the editor.
-  Nothing is re-implemented on the board.
-- **Workspaces that are not projects** are listed under "Not on the board" and can be added to a
-  lane from there.
-- **A project is one small file:** name, lane, summary, repositories with their branch, links
-  for the card, and agents to start. Opening a project creates its workspace in the right lane,
-  starts the agents, and gives it its own git worktree per repository, so two projects on the
-  same repository never share a checkout.
-- **Remote projects** are ordinary cmux SSH workspaces; the card carries a badge.
-
-The board is built on cmux's own extension points (custom sidebars, workspace groups and the
-CLI), so it needs no changes to the app and also works with stock cmux. The sidebar script and
-`proj`, the small CLI that creates lanes and opens projects, are in
-[`wheelhouse/board`](wheelhouse/board/README.md), with set-up steps.
-
-### Notifications from agents on SSH hosts
-
-cmux tells you when an agent on your Mac needs input or finishes, but an agent in a `cmux ssh`
-workspace is silent in current cmux releases. A small Claude Code hook, installed on the SSH host
-with one command, forwards those moments through the cmux relay, so the workspace and its board
-card show an unread notification. It stays out of the way for headless jobs and steps aside on
-cmux builds whose relay reports agent status itself. See
-[`wheelhouse/remote-notify`](wheelhouse/remote-notify/README.md).
-
-### Roadmap
-
-| Step | State |
-| --- | --- |
-| Editor in the file panel | Done |
-| LSP: completion, definitions, hover, diagnostics (gopls first) | Done |
-| Remote folders: edit and save files over SSH, language server on the remote host | Done |
-| Remote single files: save back to the host | Planned |
-| Project board: lanes, cards, project files, a worktree per project | Done |
-| Notifications from agents on SSH hosts | Done |
-| Agent status (working, waiting, idle) for SSH hosts on the board | Planned |
-| Board: drag cards between lanes; status from external tools (issue tracker, CI) on the card | Planned |
-
-## Build
-
-Requirements: macOS 14 or later, Xcode 26 or later with the Metal toolchain component, Zig and
-Rust. Rebuilding the web bundle also needs [bun](https://bun.sh).
+Wheelhouse IDE is built from source for now. You need macOS 14 or later, Xcode 26 or later with
+the Metal toolchain component, Zig and Rust.
 
 ```sh
 git clone https://github.com/RuchikG/Wheelhouse-IDE.git
@@ -231,97 +63,62 @@ wheelhouse/build.sh     # first build: around 25 minutes
 wheelhouse/open.sh
 ```
 
-`wheelhouse/build.sh` produces `Wheelhouse IDE.app`. It is a tagged dev build of cmux with its own
-bundle id, settings and socket, so it runs next to an installed cmux without touching it. Drive it
-from a terminal with `wheelhouse/cli`, which is the `cmux` command pointed at this app:
+The app has its own settings and runs next to an installed cmux without touching it. See
+[Building from source](wheelhouse/docs/building.md) for details.
 
-```sh
-wheelhouse/cli open path/to/file.go
-```
+## Getting started
 
-The build stays off the cmux cloud backend. Sign-in, cloud machines and mobile pairing are upstream
-features that need Manaflow's services and are not part of what this fork is for.
+1. **Open a folder.** Click the curly-braces button at the top right of a pane and choose
+   "Open Folder…". The folder opens as a tab with its file tree.
+2. **Set up the board.** Install `proj`, the small command that creates the lanes and opens
+   projects, then describe each project in a short file:
+   [board set-up](wheelhouse/board/README.md).
+3. **Work on a remote host.** `wheelhouse/remote-folder <host> <folder>` opens a folder from any
+   machine that `ssh <host>` reaches.
 
-`WHEELHOUSE_TAG` (default `wheelhouse`) names the build; a different tag is a separate app with
-separate settings.
+`wheelhouse/cli` is the `cmux` command pointed at this app, for example
+`wheelhouse/cli open path/to/file.go`.
 
-The build also sets a few preferences (`wheelhouse/defaults.sh`) that hide cmux's own account
-control, its Pro upgrade prompts, the phone pairing button and the red dev-build label. They are
-ordinary cmux switches, so they can be turned back on from the app's debug menu.
+## Documentation
 
-### Nothing reported to cmux
-
-`wheelhouse/defaults.sh` also turns off "Send anonymous telemetry". In cmux that setting stops
-usage analytics and crash reports but still asks cmux's feature-flag service for flag values every
-30 minutes. In this fork it stops that request too: with telemetry off, flags use their built-in
-defaults and local overrides. A fork has no business in cmux's analytics or crash reports, and its
-bundle id still starts with cmux's, so cmux's own check for foreign builds would not have caught
-it. Turn the setting back on in Settings to get upstream's behavior.
-
-### Naming
-
-The app is named Wheelhouse IDE, and its menus, dialogs and settings say Wheelhouse IDE where
-cmux's say cmux. This is done after the build, by rewriting the app's compiled text
-(`wheelhouse/brand/apply.py`) in all 20 languages, so no upstream source or translation file is
-edited.
-
-Some names are cmux's on purpose, because scripts, documentation and the remote daemon depend on
-them: the `cmux` command and its subcommands, `~/.config/cmux` and `cmux.json`, `CMUX_*`
-environment variables, the bundle id prefix, and the process name. cmux Cloud, cmux Pro and the
-iOS app are Manaflow's products and keep their names.
-
-The icon, a terminal prompt inside a ship's wheel, has a dark and a light variant, drawn in
-`wheelhouse/brand/icon/wheelhouse-ide-dark.svg` and `wheelhouse-ide-light.svg`. The running app
-shows the one that matches its theme (Settings → Themes: System, Light or Dark) and switches with
-it. cmux's separate App Icon setting is removed, so the icon and the theme cannot disagree. Finder,
-and the Dock before the app has started, show the dark variant. `wheelhouse/brand/icon/generate.sh`
-renders both SVGs into the asset catalog; run it after changing one, then rebuild. The release,
-nightly and RC icon sets are still cmux's.
-
-## Where the fork's code is
-
-| Path | What |
+| Topic | |
 | --- | --- |
-| `Packages/macOS/WheelhouseCodeEditor` | Swift package: the web view host, a private URL scheme that serves the bundled editor, the bridge to the page, language server processes, file access for folder tabs, unit tests |
-| `Sources/Panels/FilePreviewCodeEditor.swift` | Adapters between the file panel and the editor, for a file and for a folder |
-| `Sources/Panels/FilePreviewNewEditorTab.swift` | The new-editor-tab action: untitled files, the file and folder choosers, the right-click menu item |
-| `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page: single-file editor, folder view, language client |
-| `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
-| `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
-| `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
-| `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
-| `wheelhouse/defaults.sh` | Preferences the build applies on top of cmux's defaults |
-| `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE, and the icon source |
+| [Code editor](wheelhouse/docs/editor.md) | Editing, folder tabs, remote folders, language servers, known limits |
+| [Project board](wheelhouse/docs/board.md) | How the board works and how it maps onto cmux |
+| [Board set-up and the `proj` command](wheelhouse/board/README.md) | Lanes, project files, links, worktrees, settings |
+| [Notifications from SSH hosts](wheelhouse/remote-notify/README.md) | Installing the hook on a remote machine |
+| [Building from source](wheelhouse/docs/building.md) | Requirements, build tags, the command line |
+| [How the fork differs from cmux](wheelhouse/docs/fork.md) | Privacy, naming, where the code is, merging upstream |
 
-After changing anything under `webviews/`, regenerate the bundle:
+## Roadmap
 
-```sh
-./scripts/build-webviews-app.sh
-```
+| | State |
+| --- | --- |
+| Code editor with language servers | Done |
+| Folder tabs, on this Mac and on remote hosts | Done |
+| Project board: lanes, cards, links, a git worktree per project | Done |
+| Notifications from agents on SSH hosts | Done |
+| Search inside files | Planned |
+| Saving single remote files back to the host | Planned |
+| Agent status (working, waiting, idle) for SSH hosts on the board | Planned |
+| Dragging cards between lanes; status from issue trackers and CI on the card | Planned |
 
-Run the editor package's tests with `swift test` in `Packages/macOS/WheelhouseCodeEditor`. Page
-errors and failed asset loads are logged under the `wheelhouse.code-editor` subsystem:
+## Relationship to cmux
 
-```sh
-/usr/bin/log show --last 5m --predicate 'subsystem == "wheelhouse.code-editor"'
-```
+Wheelhouse IDE is an independent fork. It is not affiliated with or supported by Manaflow, the
+company behind cmux.
 
-## Staying close to upstream
+- The build turns off cmux's analytics, crash reports and feature-flag requests, so none of
+  them reach cmux.
+- Sign-in, cloud machines and phone pairing are Manaflow services and are switched off.
+- Its changes are kept small and separate so that upstream cmux can be merged regularly.
 
-cmux moves quickly, so the fork keeps its changes small: new code goes in its own package and
-files, and upstream files are touched only where the editor hooks in (the file panel, the app's
-key monitor, the built-in tab bar actions) and for the one-line telemetry rule in
-`Sources/FeatureFlags.swift`. The tab right-click menu is built by the Bonsplit submodule, which
-this fork does not modify: the editor item is added to that menu when it opens. `upstream` is
-`manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
-files most likely to conflict; keep this README, regenerate the bundle after a merge, and rerun
-`wheelhouse/brand/icon/generate.sh` if upstream changes its icons.
-
-The translated `README.*.md` files are upstream's and describe cmux, not this fork.
+Details are in [How the fork differs from cmux](wheelhouse/docs/fork.md).
 
 ## License
 
-Wheelhouse is licensed like cmux: GPL-3.0-or-later for the app, CLI and packages, with the
+Wheelhouse IDE is licensed like cmux: GPL-3.0-or-later for the app, CLI and packages, with the
 server directories listed in [LICENSE](LICENSE) under the Business Source License 1.1. cmux is
-copyright Manaflow, Inc. and its contributors; see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
-for bundled dependencies. Monaco Editor is MIT-licensed, copyright Microsoft Corporation.
+copyright Manaflow, Inc. and its contributors; see
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for bundled dependencies. Monaco Editor is
+MIT-licensed, copyright Microsoft Corporation.

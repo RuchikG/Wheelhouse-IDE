@@ -11,7 +11,7 @@ the CLI), so they work with this fork and with stock cmux.
 - `skills/project-links`: a Claude Code skill that lets an agent keep a project's links.
 - `examples/`: a project file and a settings file to copy.
 
-The design is described in the [repository README](../../README.md#project-board).
+The design is described in [Project board](../docs/board.md).
 
 ## Set up
 
