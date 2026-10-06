@@ -6,7 +6,8 @@ the CLI), so they work with this fork and with stock cmux.
 
 - `sidebars/projects-board.js`: the board. Lanes are workspace groups; a card is a workspace.
 - `cmd/proj`: creates the lane groups, opens a project as a workspace in its lane with its
-  worktrees, browser tabs and agents, and keeps lanes and project files in sync.
+  worktrees and agents, writes the projects' links into the board, and keeps lanes and project
+  files in sync.
 - `examples/`: a project file and a settings file to copy.
 
 The design is described in the [repository README](../../README.md#project-board).
@@ -27,8 +28,12 @@ proj init                         # lane groups + the board sidebar
 proj open my-project
 ```
 
-`proj init` links the board into `~/.config/cmux/sidebars`. Pick `projects-board` from the sidebar
+`proj init` writes the board to `~/.config/cmux/sidebars`. Pick `projects-board` from the sidebar
 button's right-click menu, or run `cmux sidebar select projects-board`.
+
+The installed board is a copy of `sidebars/projects-board.js` with each project's links written
+into it, because a custom sidebar cannot read files. `proj open` and `proj adopt` rewrite it; run
+`proj sync` after editing a project's links, the browser profile, or the board script itself.
 
 `proj` drives whichever cmux `CMUX_BIN` names (default: `cmux` on `PATH`, else the installed app).
 For Wheelhouse IDE, point it at the app's CLI:
@@ -41,6 +46,7 @@ CMUX_BIN=$PWD/../cli proj init
 
 ```
 proj init                  create the lane groups and install the board sidebar
+proj sync                  write the projects' links into the installed board again
 proj open <project>        create the project's worktrees and workspace (no-op when already open)
 proj adopt <project>       turn the workspace you are in into the project's workspace
 proj ls                    projects with their lane, workspace and checkouts
@@ -64,9 +70,27 @@ project's id on the command line; files starting with `_` are ignored.
 | `summary` | One line on the card |
 | `dir` | Workspace directory (default: the first repository's checkout) |
 | `repos` | Repositories: `path`, and optionally `branch`, `base`, `worktree` |
-| `links` | Pages opened as browser tabs: `title`, `url` |
+| `links` | Pages shown as chips on the card: `title`, `url`, and optionally `icon` (an [SF Symbol](https://developer.apple.com/sf-symbols/) name such as `calendar`) |
 | `agents` | Terminals started with the workspace: `name`, `command`, optional `dir` |
 | `location`, `host` | `remote` opens the project as a `cmux ssh <host>` workspace |
+
+## Links
+
+Each link is a chip on the project's card: an icon on every card, with the title on the selected
+one. Clicking a chip selects the project and shows the link's browser tab, opening it first if
+needed: in the pane of the project's other link tabs, or in a new pane on the right for the first
+one, using the `browser_profile` setting. A chip is tinted while its tab is open. The chip's
+right-click menu closes the tab or opens the page in your default browser.
+
+Without an `icon`, the chip's icon follows the title: a ticket for titles with words such as
+"ticket", "issue" or "bug", a branch for "pipeline", "build", "release" or "review", a document for
+"doc", "design", "PRD" or "spec", and a link otherwise.
+
+Chips need a cmux whose custom sidebars support `fixedSize` and `cursor` (Wheelhouse IDE does). On
+an older cmux the board shows no chips, and the links are not opened for you.
+
+The board recognizes a link's tab by its name, which is the link's `title`. Keep titles distinct
+within a project, and do not rename those tabs. A title made only of digits is not supported.
 
 ## Worktrees
 

@@ -200,6 +200,5 @@ func firstPane(wsRef string) (string, error) {
 }
 
 type created struct {
-	PaneRef    string `json:"pane_ref"`
 	SurfaceRef string `json:"surface_ref"`
 }

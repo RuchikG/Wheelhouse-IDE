@@ -9,6 +9,10 @@ const NEEDS = "#FF9F0A";
 const WORKING = "#0A84FF";
 const IDLE = "#34C759";
 const QUIET = "#7f7f7f66";
+const OPEN = "#5EE0C2";
+
+// `proj` rewrites this line in the installed copy: a sidebar cannot read the project files.
+const BOARD = { projects: {}, browserProfile: "" };
 
 const workspaces = () => data.workspaces() ?? [];
 const groups = () => data.groups() ?? [];
@@ -76,6 +80,82 @@ function jump(w) {
   if (waiting) cmux("surface.focus", { surface_id: waiting.surfaceId, workspace_id: w.id });
 }
 
+// Link chips use sidebar features that older cmux releases lack; there the board goes without.
+const HAS_CHIPS = typeof Text("").fixedSize === "function" && typeof Text("").cursor === "function";
+
+const linksOf = (w) => (HAS_CHIPS ? BOARD.projects[w?.title]?.links ?? [] : []);
+
+// A link's tab carries the link's title, which is how the board finds it again.
+const linkTab = (w, link) => (w?.tabs ?? []).find((t) => t.title === link?.title);
+
+// The selected card names its links, one to a row; the other cards show one row of icons.
+function linkRows(w) {
+  const links = linksOf(w);
+  if (!links.length) return [];
+  if (!w.selected) return [{ key: "icons", labelled: false, links }];
+  return links.map((link, i) => ({ key: "labelled-" + i, labelled: true, links: [link] }));
+}
+
+// Shows the link's tab, opening it first when the project has none: next to the project's
+// other link tabs, or in a new browser pane on the right for the first one.
+function openLink(w, link) {
+  cmux("workspace.select", { workspace_id: w.id });
+  const tab = linkTab(w, link);
+  if (tab) {
+    cmux("surface.focus", { surface_id: tab.surfaceId, workspace_id: w.id });
+    return;
+  }
+  const sibling = linksOf(w).map((other) => linkTab(w, other)).find((t) => t?.surfaceId);
+  if (sibling) {
+    cmux("surface.focus", { surface_id: sibling.surfaceId, workspace_id: w.id });
+    cmux("surface.create", { workspace_id: w.id, type: "browser", url: link.url, focus: "true" });
+  } else {
+    const params = { workspace_id: w.id, type: "browser", direction: "right", url: link.url, focus: "true" };
+    if (BOARD.browserProfile) params.profile = BOARD.browserProfile;
+    cmux("pane.create", params);
+  }
+  // The new tab has the focus, so a rename without a target names it.
+  cmux("surface.action", { workspace_id: w.id, action: "rename", title: link.title });
+}
+
+function closeLink(w, link) {
+  const tab = linkTab(w, link);
+  if (tab?.surfaceId) cmux("surface.close", { surface_id: tab.surfaceId, workspace_id: w.id });
+}
+
+function linkChip(w, row, link) {
+  const isOpen = () => Boolean(linkTab(w(), link()));
+  return HStack({ spacing: 4 }, [
+    Image(() => link()?.icon || "link").font(10)
+      .color(() => (isOpen() ? OPEN : "secondary")),
+    Text(() => (row()?.labelled ? link()?.title ?? "" : ""))
+      .font(11).lineLimit(1).fixedSize("horizontal"),
+  ])
+    .paddingHorizontal(6).paddingVertical(3)
+    .cornerRadius(6)
+    .background(() => (isOpen() ? OPEN + "2e" : "#7f7f7f29"))
+    .borderColor(() => (isOpen() ? OPEN + "99" : "#7f7f7f4d")).borderWidth(1)
+    .hoverBackground("#7f7f7f47")
+    .help(() => link()?.title ?? "")
+    .cursor("pointer")
+    .onTap(() => openLink(w(), link()))
+    .contextMenu([
+      Button(() => (isOpen() ? "Show tab" : "Open tab"), () => openLink(w(), link())),
+      Button("Close tab", () => closeLink(w(), link())),
+      Divider(),
+      Button("Open in default browser", () => openURL(link().url)),
+    ]);
+}
+
+function linkChips(w) {
+  return ForEach({ items: () => linkRows(w()), key: (row) => row.key }, (row) =>
+    HStack({ spacing: 5 }, [
+      ForEach({ items: () => row()?.links ?? [], key: (link) => link.title + "\n" + link.url }, (link) =>
+        linkChip(w, row, link)),
+      Spacer({ minLength: 0 }),
+    ]));
+}
+
 function moveTo(w, label) {
   const g = laneGroup(label);
   if (!g) {
@@ -122,6 +202,7 @@ function card(w) {
     ProgressView({ value: () => w()?.progress?.value ?? 0 })
       .opacity(() => (w()?.progress ? 1 : 0))
       .frame(() => ({ height: w()?.progress ? 4 : 0 })),
+    linkChips(w),
   ])
     .paddingHorizontal(10).paddingVertical(7)
     .cornerRadius(8)

@@ -14,6 +14,7 @@ import (
 const usage = `proj - project workspaces on cmux
 
   proj init                  create the lane groups, the browser profile and install the board sidebar
+  proj sync                  write the projects' links into the installed board again
   proj ls                    list projects with their lane, workspace and checkouts
   proj open <project> [--focus]
                              create the project's worktrees and workspace (no-op when already open)
@@ -57,7 +58,9 @@ func run(cmd string, args []string) error {
 	}
 	switch cmd {
 	case "init":
-		return cmdInit(cfg)
+		return cmdInit(cfg, all)
+	case "sync":
+		return cmdSync(cfg, all)
 	case "ls":
 		return cmdLs(cfg, all)
 	case "check":
@@ -74,7 +77,7 @@ func run(cmd string, args []string) error {
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 }
 
-func cmdInit(cfg *config) error {
+func cmdInit(cfg *config, all []*Manifest) error {
 	if _, err := ensureLanes(); err != nil {
 		return err
 	}
@@ -82,30 +85,24 @@ func cmdInit(cfg *config) error {
 	if err := ensureProfile(cfg.profile); err != nil {
 		return err
 	}
-
-	src, err := sidebarSource()
+	dst, err := installBoard(cfg, all)
 	if err != nil {
 		return err
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	dst := filepath.Join(home, ".config", "cmux", "sidebars", "projects-board.js")
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	switch target, err := os.Readlink(dst); {
-	case err == nil && target == src:
-	case errors.Is(err, os.ErrNotExist):
-		if err := os.Symlink(src, dst); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("%s already exists and is not our symlink; move it away and rerun", dst)
 	}
 	fmt.Println("board installed:", dst)
 	fmt.Println("show it with the sidebar button's right-click menu, or: cmux sidebar open projects-board")
+	return nil
+}
+
+func cmdSync(cfg *config, all []*Manifest) error {
+	if err := ensureProfile(cfg.profile); err != nil {
+		return err
+	}
+	dst, err := installBoard(cfg, all)
+	if err != nil {
+		return err
+	}
+	fmt.Println("board written:", dst)
 	return nil
 }
 
@@ -221,6 +218,7 @@ func cmdOpen(cfg *config, all []*Manifest, args []string) error {
 		return errors.New("fix the manifest first")
 	}
 
+	refreshBoard(cfg, all)
 	b, err := loadBoard()
 	if err != nil {
 		return err
@@ -279,10 +277,6 @@ func cmdOpen(cfg *config, all []*Manifest, args []string) error {
 		return err
 	}
 	fmt.Printf("workspace %s  %s  [%s]\n", wsRef, m.Name, m.Lane)
-
-	if err := openLinks(cfg, m, wsRef); err != nil {
-		return err
-	}
 	if focus {
 		_, err = cmux("workspace", "select", wsRef)
 	}
@@ -290,7 +284,7 @@ func cmdOpen(cfg *config, all []*Manifest, args []string) error {
 }
 
 // cmdAdopt puts a workspace that already exists on the board. It keeps the workspace's
-// terminals as they are and only adds the project's name, summary, lane and tabs.
+// terminals as they are and only adds the project's name, summary and lane.
 func cmdAdopt(cfg *config, all []*Manifest, args []string) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New("usage: proj adopt <project> [workspace]")
@@ -329,13 +323,8 @@ func cmdAdopt(cfg *config, all []*Manifest, args []string) error {
 		return err
 	}
 	fmt.Printf("adopted   %s  [%s]\n", m.Name, m.Lane)
-	if len(m.Links) == 0 {
-		return nil
-	}
-	if err := ensureProfile(cfg.profile); err != nil {
-		return err
-	}
-	return openLinks(cfg, m, target)
+	refreshBoard(cfg, all)
+	return ensureProfile(cfg.profile)
 }
 
 // agentDir is where an agent starts: its own dir, else the configured shared directory, else
@@ -472,35 +461,6 @@ func openRemoteWorkspace(cfg *config, m *Manifest, cwd string, lane group) (stri
 		return "", err
 	}
 	return ws.Ref, nil
-}
-
-// openLinks puts every link in one browser pane to the right of the terminal, one tab each.
-func openLinks(cfg *config, m *Manifest, wsRef string) error {
-	var pane string
-	for _, l := range m.Links {
-		var c created
-		var err error
-		if pane == "" {
-			args := []string{"new-pane", "--type", "browser", "--direction", "right", "--workspace", wsRef, "--url", l.URL, "--focus", "false"}
-			if cfg.profile != "" {
-				args = append(args, "--profile", cfg.profile)
-			}
-			err = cmuxJSON(&c, args...)
-			pane = c.PaneRef
-		} else {
-			err = cmuxJSON(&c, "new-surface", "--type", "browser", "--workspace", wsRef, "--pane", pane, "--url", l.URL, "--focus", "false")
-		}
-		if err != nil {
-			return err
-		}
-		if l.Title != "" {
-			if _, err := cmux("rename-tab", "--workspace", wsRef, "--surface", c.SurfaceRef, l.Title); err != nil {
-				return err
-			}
-		}
-		fmt.Printf("tab       %s\n", l.URL)
-	}
-	return nil
 }
 
 func cmdLane(all []*Manifest, args []string) error {

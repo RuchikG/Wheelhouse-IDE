@@ -13,9 +13,10 @@ repos:
   - path: ~/code/shared-lib
     branch: feat/example
     worktree: false        # work in the main checkout instead of a worktree
-links:
+links:                     # chips on the card; a click opens the page as a browser tab
   - title: Tech design
     url: https://example.com/doc
+    icon: doc.text         # optional SF Symbol name; default: chosen from the title
 agents:
   - name: agent
     command: claude

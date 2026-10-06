@@ -65,6 +65,8 @@ func (r Repo) wantsWorktree() bool {
 type Link struct {
 	Title string `yaml:"title"`
 	URL   string `yaml:"url"`
+	// Icon is an SF Symbol name for the link's chip on the board.
+	Icon string `yaml:"icon"`
 }
 
 type Agent struct {
