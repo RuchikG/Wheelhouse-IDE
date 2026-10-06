@@ -73,7 +73,8 @@ final class TerminalSurfaceSpawnPolicyBridge: TerminalSurfaceSpawnPolicyProvidin
             // `DisableComputerUse` (MDM) wins over the user setting on every
             // spawn, so a new agent launch never receives the tools.
             computerUseEnabled: computerUseConfigStore.snapshotValue(for: computerUseEnabledKey)
-                && !ManagedDevicePolicy().isEnforced(.disableComputerUse),
+                && !ManagedDevicePolicy().isEnforced(.disableComputerUse)
+                && WheelhouseDefaults.allowsComputerUse,
             piHooksEnabled: integrations.piHooksEnabled
         )
     }

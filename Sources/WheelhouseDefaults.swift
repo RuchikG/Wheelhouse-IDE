@@ -12,7 +12,17 @@ enum WheelhouseDefaults {
         UserDefaults.standard.bool(forKey: remoteAgentHooksKey)
     }
 
+    /// Whether this app runs cmux's Computer Use helper and hands its tools to
+    /// agents. Off until the user turns it on.
+    static let computerUseKey = "wheelhouse.computerUse.enabled"
+
+    static var allowsComputerUse: Bool {
+        UserDefaults.standard.bool(forKey: computerUseKey)
+    }
+
     static func register(in defaults: UserDefaults = .standard) {
+        // The agent wrappers started in this app's terminals read this.
+        if !allowsComputerUse { setenv("CMUX_COMPUTER_USE_MCP_DISABLED", "1", 1) }
         var values: [String: Any] = [
             // No analytics, crash reports or feature-flag requests go to cmux's
             // services; flags then use their built-in defaults and the overrides below.

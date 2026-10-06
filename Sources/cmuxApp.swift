@@ -175,7 +175,13 @@ struct cmuxApp: App {
             computerUsePaths.authenticationTokenFileURL.path,
             1
         )
-        let computerUseRuntimeService = ComputerUseRuntimeService(paths: computerUsePaths)
+        let computerUseRuntimeService = ComputerUseRuntimeService(
+            paths: computerUsePaths,
+            // Wheelhouse: also off unless the user turns Computer Use on for this app.
+            isDisabledByPolicy: {
+                ManagedDevicePolicy().isEnforced(.disableComputerUse) || !WheelhouseDefaults.allowsComputerUse
+            }
+        )
         self.computerUseRuntimeService = computerUseRuntimeService
         _ = KeyboardShortcutSettings.settingsFileStore
         StartupBreadcrumbLog.append("app.init.keyboardShortcuts.loaded")

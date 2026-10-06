@@ -37,6 +37,20 @@ later stops new installs; it does not remove hooks already on a host.
 Notifications from agents on SSH hosts do not need any of this; they use the small hook in
 [`wheelhouse/remote-notify`](../remote-notify/README.md).
 
+## Computer Use is off
+
+cmux's Computer Use lets agents click and type in other apps through a helper app that needs
+Accessibility and Screen Recording permission. Wheelhouse IDE does not install or start that
+helper, and agents started in its terminals are not given the Computer Use tools, unless you
+turn it on and restart the app:
+
+```sh
+defaults write <bundle id> wheelhouse.computerUse.enabled -bool true
+```
+
+The switch in Settings → Computer Use is cmux's own and is shared with an installed cmux through
+`~/.config/cmux`; this setting applies to Wheelhouse IDE alone and leaves that one as it is.
+
 ## Naming and icon
 
 The app is named Wheelhouse IDE, and its menus, dialogs and settings say Wheelhouse IDE where
@@ -92,8 +106,9 @@ cmux moves quickly, so the fork keeps its changes small: new code goes in its ow
 files, and upstream files are touched only where the editor hooks in (the file panel, the app's
 key monitor, the built-in tab bar actions), for the one-line telemetry rule in
 `Sources/FeatureFlags.swift`, for one line in `Sources/CmuxMain.swift` that registers the
-fork's preferences, and for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift`
-that makes agent hooks on SSH hosts opt-in. The tab right-click menu is built by the Bonsplit submodule, which
+fork's preferences, for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift` that
+makes agent hooks on SSH hosts opt-in, and for the two checks (`Sources/cmuxApp.swift`,
+`Sources/TerminalSurfaceRuntimeWiring.swift`) that keep Computer Use off until asked for. The tab right-click menu is built by the Bonsplit submodule, which
 this fork does not modify: the editor item is added to that menu when it opens. `upstream` is
 `manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
 files most likely to conflict; keep the fork's README, regenerate the bundle after a merge, and rerun

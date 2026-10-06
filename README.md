@@ -120,6 +120,8 @@ company behind cmux.
 - The build turns off cmux's analytics, crash reports and feature-flag requests, so none of
   them reach cmux.
 - Sign-in, cloud machines and phone pairing are Manaflow services and are switched off.
+- cmux's Computer Use, which lets agents click and type in other apps, is off until you turn
+  it on.
 - Its changes are kept small and separate so that upstream cmux can be merged regularly.
 
 Details are in [How the fork differs from cmux](wheelhouse/docs/fork.md).
