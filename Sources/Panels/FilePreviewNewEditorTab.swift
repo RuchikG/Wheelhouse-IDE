@@ -1,4 +1,5 @@
 import AppKit
+import CmuxCore
 import Bonsplit
 import WheelhouseCodeEditor
 
@@ -66,6 +67,38 @@ enum NewEditorTabPanel {
         menu.addItem(ClosureMenuItem(title: openFolderTitle) { chosen = .chosenFolder })
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         return chosen
+    }
+
+    /// Asks for a folder on `host`, starting from `suggestion`. `nil` when cancelled.
+    static func askRemoteFolder(on host: String, suggestion: String?) -> String? {
+        let alert = NSAlert()
+        alert.messageText = String(
+            localized: "wheelhouse.remoteFolder.title", defaultValue: "Open a folder on \(host)"
+        )
+        alert.informativeText = String(
+            localized: "wheelhouse.remoteFolder.message",
+            defaultValue: "Its files are edited and saved on that host, and language features run there."
+        )
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.stringValue = suggestion ?? "~"
+        field.placeholderString = "~/project"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        alert.addButton(withTitle: String(localized: "wheelhouse.newEditorTab.panelPrompt", defaultValue: "Open"))
+        alert.addButton(withTitle: String(localized: "wheelhouse.remoteFolder.cancel", defaultValue: "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let folder = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return folder.isEmpty ? nil : folder
+    }
+
+    static func reportRemoteFolderFailure(_ folder: String, on host: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            localized: "wheelhouse.remoteFolder.failed", defaultValue: "“\(folder)” could not be opened on \(host)"
+        )
+        alert.informativeText = message
+        alert.runModal()
     }
 
     static func directoryURL(_ path: String?) -> URL? {
@@ -223,7 +256,35 @@ extension Workspace {
         inPane paneId: PaneID,
         toRightOf anchorTabId: TabID? = nil
     ) -> Bool {
+        if kind == .chosenFolder, let remote = remoteConfiguration, remote.transport == .ssh {
+            return openRemoteFolderTab(on: remote.destination, inPane: paneId, toRightOf: anchorTabId)
+        }
         let filePaths = NewEditorTabPanel.filePaths(for: kind, startDirectory: resolvedWorkingDirectory())
+        return openEditorTabs(filePaths, inPane: paneId, toRightOf: anchorTabId)
+    }
+
+    /// In a workspace connected to another machine, "Open Folder…" means a
+    /// folder there: asks for its path, checks it on the host and opens it.
+    private func openRemoteFolderTab(on host: String, inPane paneId: PaneID, toRightOf anchorTabId: TabID?) -> Bool {
+        guard let folder = NewEditorTabPanel.askRemoteFolder(on: host, suggestion: trustedRemoteCurrentDirectory) else {
+            return false
+        }
+        let connection = FilePreviewRemoteFolders.connection(to: host, from: self)
+        Task { @MainActor [weak self] in
+            switch await connection.resolveFolder(folder) {
+            case .success(let remotePath):
+                guard let self,
+                      let standIn = FilePreviewRemoteFolders.standIn(host: host, remotePath: remotePath) else { return }
+                self.openEditorTabs([standIn], inPane: paneId, toRightOf: anchorTabId)
+            case .failure(let failure):
+                NewEditorTabPanel.reportRemoteFolderFailure(folder, on: host, message: failure.message)
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    private func openEditorTabs(_ filePaths: [String], inPane paneId: PaneID, toRightOf anchorTabId: TabID?) -> Bool {
         guard !filePaths.isEmpty else { return false }
         let existingPanelIds = Set(panels.keys)
         let opened = openFileSurfaces(inPane: paneId, filePaths: filePaths, focus: true, reuseExisting: true)

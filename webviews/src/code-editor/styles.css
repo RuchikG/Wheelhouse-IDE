@@ -47,6 +47,19 @@ body,
   font-weight: 600;
 }
 
+.project-tree-host {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid var(--project-line);
+  border-radius: 8px;
+  color: var(--project-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .project-tree-refresh {
   flex: none;
   border: 0;

@@ -78,6 +78,8 @@ export class ProjectEditor {
   private readonly expanded = new Set<string>();
   private readonly rows = new Map<string, HTMLElement>();
   private root = "";
+  /** The host that holds the folder; undefined for this machine, which has a Trash. */
+  private remote: string | undefined;
   private active: OpenFile | undefined;
   private tabWidth: number | undefined;
   private reportedDirty = false;
@@ -89,6 +91,7 @@ export class ProjectEditor {
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly treeTitle = element("div", "project-tree-title");
+  private readonly treeHost = element("div", "project-tree-host");
   private readonly treeList = element("div", "project-tree-list");
   private readonly strip = element("div", "project-strip");
   private readonly notice = element("div", "project-notice");
@@ -112,7 +115,8 @@ export class ProjectEditor {
     refresh.title = "Refresh";
     refresh.addEventListener("click", () => void this.renderTree());
     const header = element("div", "project-tree-header");
-    header.append(this.treeTitle, refresh);
+    this.treeHost.hidden = true;
+    header.append(this.treeTitle, this.treeHost, refresh);
     tree.append(header, this.finder.input, this.finder.list, this.treeList);
     const resizer = element("div", "project-resizer");
     const main = element("main", "project-main");
@@ -153,8 +157,11 @@ export class ProjectEditor {
     switch (message.type) {
       case "project":
         this.root = message.root;
+        this.remote = message.remote;
         this.treeTitle.textContent = message.name;
-        this.treeTitle.title = message.root;
+        this.treeTitle.title = message.remote ? `${message.remote}:${message.root}` : message.root;
+        this.treeHost.textContent = message.remote ?? "";
+        this.treeHost.hidden = !message.remote;
         void this.renderTree();
         if (this.files.size === 0) {
           void this.restore(message.openFiles ?? [], message.activeFile);
@@ -298,7 +305,7 @@ export class ProjectEditor {
     if (path) {
       items.push(
         { label: "Rename…", run: () => void this.rename(path) },
-        { label: "Move to Trash", run: () => void this.trash(path) },
+        { label: this.remote ? "Delete…" : "Move to Trash", run: () => void this.trash(path) },
       );
     }
     showMenu(this.container, event.clientX, event.clientY, items);
@@ -454,7 +461,7 @@ export class ProjectEditor {
     const result = await this.host.trash(path);
     if (!result.ok) {
       if (result.error !== "cancelled") {
-        this.showNotice(`${baseName(path)} could not be moved to the Trash.`);
+        this.showNotice(`${baseName(path)} could not be ${this.remote ? "deleted" : "moved to the Trash"}.`);
       }
       return;
     }

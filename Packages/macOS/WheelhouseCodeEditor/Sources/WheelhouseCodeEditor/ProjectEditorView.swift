@@ -64,6 +64,7 @@ public struct ProjectEditorView: NSViewRepresentable {
     }
 
     private func apply(to host: CodeEditorHostView, coordinator: CodeEditorCoordinator) {
+        guard !coordinator.isClosed else { return }
         coordinator.onProjectDirtyChange = onDirtyChange
         coordinator.onPointerDown = onPointerDown
         let webView = coordinator.ensureWebView(assetDirectory: assetDirectory)

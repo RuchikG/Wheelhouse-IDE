@@ -22,6 +22,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     private var document: CodeEditorDocument?
     private var project: CodeEditorProject?
     private var sentProject: CodeEditorProject?
+    /// Where the page's file requests go, with the project it was made for.
+    private var files: (project: CodeEditorProject?, access: any ProjectFiles)?
     private var options: CodeEditorOptions?
     private var theme: CodeEditorTheme?
     private var sentOptions: CodeEditorOptions?
@@ -112,8 +114,13 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         flush()
     }
 
+    /// Whether `close()` has run. A closed coordinator stays closed: a view
+    /// that is still on screen for a moment must not start the editor again.
+    public private(set) var isClosed = false
+
     /// Tears down the web view and stops the language servers.
     public func close() {
+        isClosed = true
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.messageHandlerName)
         webView.navigationDelegate = nil
@@ -122,6 +129,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         self.webView = nil
         isReady = false
         stopLanguageServers()
+        files?.access.close()
+        files = nil
         Self.liveCoordinators.remove(self)
     }
 
@@ -137,7 +146,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         }
         if let project, project != sentProject {
             sentProject = project
-            let session = ProjectEditorSession.load(root: project.rootPath)
+            let session = ProjectEditorSession.load(root: project.rootPath, host: project.remote?.name)
             var message: [String: Any] = [
                 "type": "project",
                 "root": project.rootPath,
@@ -145,6 +154,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 "openFiles": session.openFiles,
             ]
             message["activeFile"] = session.activeFile
+            message["remote"] = project.remote?.name
             send(message)
         }
         if let document, let sequence = sync.outgoingSequence(for: document) {
@@ -212,7 +222,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     private func handleFileRequest(_ body: [String: Any]) {
         guard let id = body["id"] as? Int, let operation = body["op"] as? String,
               let path = body["path"] as? String, path.hasPrefix("/") else { return }
-        let files = ProjectFileSystem(root: project?.rootPath)
+        let files = fileAccess()
         let content = body["content"] as? String
         let expectedModified = body["modified"] as? Double
         let destination = body["to"] as? String
@@ -223,7 +233,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         let generation = pageGeneration
         Task { [weak self] in
             let reply = await Task.detached { () -> FileReply in
-                Self.perform(
+                await Self.perform(
                     operation, path: path, content: content, expectedModified: expectedModified,
                     destination: destination, in: files
                 )
@@ -273,38 +283,53 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         }
     }
 
+    /// The files of the current project, on this Mac or on its remote host.
+    /// A single-file editor has no project and may only read.
+    private func fileAccess() -> any ProjectFiles {
+        if let files, files.project == project { return files.access }
+        files?.access.close()
+        let access: any ProjectFiles
+        if let project, let host = project.remote {
+            access = RemoteProjectFiles(root: project.rootPath, host: host)
+        } else {
+            access = ProjectFileSystem(root: project?.rootPath)
+        }
+        files = (project, access)
+        return access
+    }
+
     private nonisolated static func perform(
         _ operation: String,
         path: String,
         content: String?,
         expectedModified: Double?,
         destination: String? = nil,
-        in files: ProjectFileSystem
-    ) -> FileReply {
+        in files: any ProjectFiles
+    ) async -> FileReply {
         do {
             switch operation {
             case "list":
-                return .entries(try files.list(path))
+                return .entries(try await files.list(path))
             case "read":
-                return .file(try files.read(path))
+                return .file(try await files.read(path))
             case "write":
                 guard let content else { return .failed("unreadable") }
-                return .written(try files.write(content, to: path, expectedModified: expectedModified))
+                return .written(try await files.write(content, to: path, expectedModified: expectedModified))
             case "createFile":
-                try files.createFile(path)
+                try await files.createFile(path)
                 return .done
             case "createDirectory":
-                try files.createDirectory(path)
+                try await files.createDirectory(path)
                 return .done
             case "move":
                 guard let destination, destination.hasPrefix("/") else { return .failed("unreadable") }
-                try files.move(path, to: destination)
+                try await files.move(path, to: destination)
                 return .done
             case "trash":
-                try files.trash(path)
+                try await files.trash(path)
                 return .done
             case "index":
-                let index = try files.index()
+                let index = try await files.index()
                 return .index(index.paths, isComplete: index.isComplete)
             default:
                 return .failed("unsupported")
@@ -325,7 +350,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     }
 
     /// A save found the file changed by something else since it was read.
-    private func resolveChangedOnDisk(id: Int, path: String, content: String, files: ProjectFileSystem) {
+    private func resolveChangedOnDisk(id: Int, path: String, content: String, files: any ProjectFiles) {
         let alert = NSAlert()
         alert.messageText = String(
             localized: "wheelhouse.project.changedOnDisk.title",
@@ -341,21 +366,40 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             send(FileReply.changedOnDisk.message(id: id))
             return
         }
-        let reply = Self.perform("write", path: path, content: content, expectedModified: nil, in: files)
-        send(reply.message(id: id))
+        let generation = pageGeneration
+        Task { [weak self] in
+            let reply = await Self.perform("write", path: path, content: content, expectedModified: nil, in: files)
+            guard let self, self.pageGeneration == generation else { return }
+            self.send(reply.message(id: id))
+        }
     }
 
     private func confirmTrash(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent
         let alert = NSAlert()
-        alert.messageText = String(
-            localized: "wheelhouse.project.trash.title",
-            defaultValue: "Move “\((path as NSString).lastPathComponent)” to the Trash?"
-        )
-        alert.informativeText = String(
-            localized: "wheelhouse.project.trash.message",
-            defaultValue: "You can restore it from the Trash."
-        )
-        alert.addButton(withTitle: String(localized: "wheelhouse.project.trash.confirm", defaultValue: "Move to Trash"))
+        if let host = project?.remote?.name {
+            // A remote host has no Trash to move things to.
+            alert.alertStyle = .warning
+            alert.messageText = String(
+                localized: "wheelhouse.project.delete.title",
+                defaultValue: "Delete “\(name)” on \(host)?"
+            )
+            alert.informativeText = String(
+                localized: "wheelhouse.project.delete.message",
+                defaultValue: "This cannot be undone."
+            )
+            alert.addButton(withTitle: String(localized: "wheelhouse.project.delete.confirm", defaultValue: "Delete"))
+        } else {
+            alert.messageText = String(
+                localized: "wheelhouse.project.trash.title",
+                defaultValue: "Move “\(name)” to the Trash?"
+            )
+            alert.informativeText = String(
+                localized: "wheelhouse.project.trash.message",
+                defaultValue: "You can restore it from the Trash."
+            )
+            alert.addButton(withTitle: String(localized: "wheelhouse.project.trash.confirm", defaultValue: "Move to Trash"))
+        }
         alert.addButton(withTitle: String(localized: "wheelhouse.project.trash.cancel", defaultValue: "Cancel"))
         return alert.runModal() == .alertFirstButtonReturn
     }
@@ -366,7 +410,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         ProjectEditorSession(
             openFiles: (body["open"] as? [String] ?? []).filter { $0.hasPrefix("/") },
             activeFile: body["active"] as? String
-        ).save(root: project.rootPath)
+        ).save(root: project.rootPath, host: project.remote?.name)
     }
 
     /// Asks what to do with unsaved edits in a file the page is about to close.
@@ -421,24 +465,27 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         startingLanguageServers.insert(server)
         let generation = pageGeneration
         Task { [weak self] in
-            let searchPath = await LanguageServerEnvironment.shared.searchPath()
+            let launch: LanguageServerLaunch?
+            if let project = self?.project, let host = project.remote {
+                launch = .remote(definition, root: project.rootPath, host: host)
+            } else {
+                // A project's server is rooted at the project folder, a single file's at its module.
+                let root = self?.project?.rootPath
+                    ?? LanguageServerRegistry.rootDirectory(forFile: path, markers: definition.rootMarkers)
+                launch = await .local(definition, root: root)
+            }
             guard let self, self.pageGeneration == generation else { return }
             self.startingLanguageServers.remove(server)
-            guard let executable = LanguageServerEnvironment.executable(named: definition.command[0], searchPath: searchPath) else {
+            guard let launch else {
                 CodeEditorLog.languageServer.notice("no \(definition.command[0], privacy: .public) on PATH; language features are off")
                 self.sendLanguageServerState(server, "unavailable")
                 return
             }
-            // A project's server is rooted at the project folder, a single file's at its module.
-            let root = self.project?.rootPath
-                ?? LanguageServerRegistry.rootDirectory(forFile: path, markers: definition.rootMarkers)
-            var environment = ProcessInfo.processInfo.environment
-            environment["PATH"] = searchPath
             let process = LanguageServerProcess(
-                executable: executable,
-                arguments: Array(definition.command.dropFirst()),
-                environment: environment,
-                directory: URL(fileURLWithPath: root, isDirectory: true),
+                executable: launch.executable,
+                arguments: launch.arguments,
+                environment: launch.environment,
+                directory: launch.directory,
                 onMessage: { [weak self] body in
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated { self?.deliver(body, from: server, generation: generation) }
@@ -453,13 +500,13 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             do {
                 try process.start()
             } catch {
-                CodeEditorLog.languageServer.error("could not start \(executable.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                CodeEditorLog.languageServer.error("could not start \(launch.executable.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 self.sendLanguageServerState(server, "unavailable")
                 return
             }
-            CodeEditorLog.languageServer.notice("started \(executable.lastPathComponent, privacy: .public) for \(root, privacy: .public)")
+            CodeEditorLog.languageServer.notice("started \(definition.command[0], privacy: .public) for \(launch.label, privacy: .public)")
             self.languageServers[server] = process
-            self.languageServerRoots[server] = root
+            self.languageServerRoots[server] = launch.root
             self.sendLanguageServerState(server, "open")
         }
     }
@@ -467,7 +514,9 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     private func forwardToLanguageServer(_ server: String, _ message: [String: Any]) {
         guard let process = languageServers[server], let root = languageServerRoots[server] else { return }
         let completed = LanguageServerRegistry.completingInitialize(
-            message, rootDirectory: root, processIdentifier: ProcessInfo.processInfo.processIdentifier
+            message,
+            rootDirectory: root,
+            processIdentifier: project?.remote == nil ? ProcessInfo.processInfo.processIdentifier : nil
         )
         guard let body = try? JSONSerialization.data(withJSONObject: completed) else { return }
         process.send(body)

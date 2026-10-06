@@ -19,14 +19,16 @@ final class LanguageServerProcess: @unchecked Sendable {
         executable: URL,
         arguments: [String],
         environment: [String: String],
-        directory: URL,
+        directory: URL?,
         onMessage: @escaping @Sendable (Data) -> Void,
         onExit: @escaping @Sendable () -> Void
     ) {
         process.executableURL = executable
         process.arguments = arguments
         process.environment = environment
-        process.currentDirectoryURL = directory
+        if let directory { process.currentDirectoryURL = directory }
+        // A write after the server went away must fail, not end the app.
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors

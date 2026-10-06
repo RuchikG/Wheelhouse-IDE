@@ -8,7 +8,15 @@ export type CodeEditorHostMessage =
   | { type: "reveal"; line: number; column: number }
   | { type: "lspState"; server: string; state: "open" | "closed" | "unavailable" }
   | { type: "lsp"; server: string; message: unknown }
-  | { type: "project"; root: string; name: string; openFiles?: string[]; activeFile?: string }
+  | {
+      type: "project";
+      root: string;
+      name: string;
+      openFiles?: string[];
+      activeFile?: string;
+      /** The host that holds the folder, when it is not this machine. */
+      remote?: string;
+    }
   | ({ type: "fsResult"; id: number } & FileResult)
   | { type: "confirmResult"; id: number; choice: "save" | "discard" | "cancel" };
 

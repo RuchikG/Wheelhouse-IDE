@@ -9,8 +9,9 @@ struct ProjectEditorSession: Equatable, Sendable {
     var openFiles: [String] = []
     var activeFile: String?
 
-    static func load(root: String, from defaults: UserDefaults = .standard) -> ProjectEditorSession {
-        guard let stored = defaults.dictionary(forKey: defaultsKey)?[key(root)] as? [String: Any] else {
+    /// - Parameter host: The remote host that holds the folder; `nil` for this Mac.
+    static func load(root: String, host: String? = nil, from defaults: UserDefaults = .standard) -> ProjectEditorSession {
+        guard let stored = defaults.dictionary(forKey: defaultsKey)?[key(root, host)] as? [String: Any] else {
             return ProjectEditorSession()
         }
         return ProjectEditorSession(
@@ -19,19 +20,20 @@ struct ProjectEditorSession: Equatable, Sendable {
         )
     }
 
-    func save(root: String, to defaults: UserDefaults = .standard) {
+    func save(root: String, host: String? = nil, to defaults: UserDefaults = .standard) {
         var sessions = defaults.dictionary(forKey: Self.defaultsKey) ?? [:]
         if openFiles.isEmpty {
-            sessions.removeValue(forKey: Self.key(root))
+            sessions.removeValue(forKey: Self.key(root, host))
         } else {
             var stored: [String: Any] = ["open": openFiles]
             stored["active"] = activeFile
-            sessions[Self.key(root)] = stored
+            sessions[Self.key(root, host)] = stored
         }
         defaults.set(sessions, forKey: Self.defaultsKey)
     }
 
-    private static func key(_ root: String) -> String {
-        URL(fileURLWithPath: root).resolvingSymlinksInPath().path
+    private static func key(_ root: String, _ host: String?) -> String {
+        if let host { return "\(host):\(root)" }
+        return URL(fileURLWithPath: root).resolvingSymlinksInPath().path
     }
 }

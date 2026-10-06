@@ -31,7 +31,9 @@ struct LanguageServerMessageFramer {
     }
 
     private static func contentLength(in header: String) -> Int? {
-        for line in header.components(separatedBy: "\r\n") {
+        // Anything a remote shell printed before the server started ends up in
+        // front of the first header; splitting on every line break steps over it.
+        for line in header.split(whereSeparator: \.isNewline) {
             let parts = line.split(separator: ":", maxSplits: 1)
             if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length",
                let length = Int(parts[1].trimmingCharacters(in: .whitespaces)), length >= 0 {

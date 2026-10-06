@@ -63,6 +63,26 @@ tree on the left, a strip of the files you have opened from it, and the editor.
 
 From a script, `wheelhouse/cli rpc file.open '{"paths":["/path/to/folder"]}'` opens a folder tab.
 
+#### Folders on a remote host
+
+A folder tab can show a folder on another machine. Its files are read, edited and saved there,
+and the language server runs there, so definitions and diagnostics follow that machine's code
+and tools. The tree shows the host's name next to the folder's.
+
+- In a workspace connected to a host with `cmux ssh`, "Open Folder…" asks for a path on that
+  host (`~` works), starting from the terminal's directory.
+- From a shell, `wheelhouse/remote-folder <host> <folder>` opens one in any workspace. The host is
+  whatever `ssh <host>` reaches without asking for a password.
+- The editor keeps one `ssh` connection open per folder tab and runs a small Python program
+  over it that answers its file requests, so an operation costs one round trip instead of a new
+  connection. The host needs `python3` (3.6 or later); nothing is installed on it. A second
+  connection carries the language server, started through your login shell there so that tools
+  on your own `PATH` (`~/go/bin`, for example) are found.
+- There is no Trash on a remote host: the tree's menu says "Delete…" and deleting is final.
+- If the connection drops, the next file operation opens a new one. Language features stay off
+  until the tab is reopened.
+- Single remote files opened from the Files sidebar are still read-only previews.
+
 #### Language servers
 
 Go files get completion, hover, go to definition, find references, rename, formatting and
@@ -93,7 +113,10 @@ Not there yet:
 - A folder tab cannot search inside files or move a file to another folder, and it does not
   remember which folders were expanded.
 - If a language server exits, its features stay off in that tab until the tab is reopened.
-- Remote files are read-only, as in cmux.
+- A remote file opened on its own (from the Files sidebar, or by ⌘-clicking a path in a remote
+  terminal) is a copy, as in cmux: it is not saved back. Open its folder instead.
+- A remote folder tab does not notice a file changed on the host until the file is opened or
+  the window regains focus, and it refuses to overwrite such a change without asking.
 - Markdown source editing still uses the native editor.
 - Other editor shortcuts that overlap an app shortcut still go to the app.
 
@@ -188,7 +211,8 @@ cmux builds whose relay reports agent status itself. See
 | --- | --- |
 | Editor in the file panel | Done |
 | LSP: completion, definitions, hover, diagnostics (gopls first) | Done |
-| Remote workspaces: edit and save files over SSH, language server on the remote host | Planned |
+| Remote folders: edit and save files over SSH, language server on the remote host | Done |
+| Remote single files: save back to the host | Planned |
 | Project board: lanes, cards, project files, a worktree per project | Done |
 | Notifications from agents on SSH hosts | Done |
 | Agent status (working, waiting, idle) for SSH hosts on the board | Planned |

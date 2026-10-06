@@ -52,12 +52,22 @@ enum LanguageServerRegistry {
         return fileDirectory
     }
 
+    /// The remote shell command that runs `command` in `root` through the
+    /// user's login shell, which is where tools installed for one user (in
+    /// `~/go/bin`, say) are on the `PATH`.
+    static func remoteCommand(_ command: [String], root: String) -> String {
+        let server = "exec " + command.map(CodeEditorRemoteHost.shellWord).joined(separator: " ")
+        return "cd \(CodeEditorRemoteHost.shellWord(root)) && exec \"${SHELL:-/bin/sh}\" -lc \(CodeEditorRemoteHost.shellWord(server))"
+    }
+
     /// Fills in what only the host knows in the client's `initialize` request.
-    static func completingInitialize(_ message: [String: Any], rootDirectory: String, processIdentifier: Int32) -> [String: Any] {
+    /// - Parameter processIdentifier: This app's, for a server on this machine
+    ///   to watch; `nil` for a server elsewhere, where the number means nothing.
+    static func completingInitialize(_ message: [String: Any], rootDirectory: String, processIdentifier: Int32?) -> [String: Any] {
         guard message["method"] as? String == "initialize" else { return message }
         let rootURI = URL(fileURLWithPath: rootDirectory, isDirectory: true).absoluteString
         var params = message["params"] as? [String: Any] ?? [:]
-        params["processId"] = Int(processIdentifier)
+        params["processId"] = processIdentifier.map { Int($0) as Any } ?? NSNull()
         params["rootUri"] = rootURI
         params["workspaceFolders"] = [["uri": rootURI, "name": (rootDirectory as NSString).lastPathComponent]]
         var completed = message

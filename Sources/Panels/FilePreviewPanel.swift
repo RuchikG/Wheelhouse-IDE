@@ -1787,7 +1787,7 @@ struct FilePreviewPanelView: View {
     private var header: some View {
         PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.viewfinder",
-            filePath: panel.filePath,
+            filePath: panel.headerPath,
             foregroundColor: themeForegroundColor
         ) {
             if panel.previewMode == .text {

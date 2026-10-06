@@ -1,4 +1,5 @@
 import AppKit
+import CmuxCore
 import CmuxSettings
 import CmuxSettingsUI
 import SwiftUI
@@ -61,6 +62,81 @@ struct FilePreviewCodeEditor: View {
     }
 }
 
+/// Folders on remote hosts, shown as folder tabs.
+///
+/// A file tab is a path on this Mac, so a remote folder is stood in for by an
+/// empty folder whose own path spells the host and the remote path:
+/// `<directory>/<host>/<remote path>`. Opening that folder opens the remote
+/// one, which also brings the tab back with the session after a restart.
+enum FilePreviewRemoteFolders {
+    static var directory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "wheelhouse", isDirectory: true)
+            .appendingPathComponent("Remote", isDirectory: true)
+    }
+
+    /// Creates the stand-in for `remotePath` (absolute) on `host` and returns its path.
+    static func standIn(host: String, remotePath: String) -> String? {
+        guard remotePath.hasPrefix("/"), !host.isEmpty, !host.contains("/"), host != ".", host != ".." else { return nil }
+        let folder = directory.appendingPathComponent(host, isDirectory: true).path + remotePath
+        do {
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        return (folder as NSString).standardizingPath
+    }
+
+    /// The host and remote path a stand-in folder stands for; `nil` for any other path.
+    static func remoteFolder(forStandIn path: String) -> (host: String, path: String)? {
+        let prefix = (directory.path as NSString).standardizingPath + "/"
+        let standardized = (path as NSString).standardizingPath
+        guard standardized.hasPrefix(prefix) else { return nil }
+        let rest = standardized.dropFirst(prefix.count)
+        guard let slash = rest.firstIndex(of: "/") else { return nil }
+        return (String(rest[..<slash]), String(rest[slash...]))
+    }
+
+    /// How to reach `host`: the way the tab's workspace reaches it when that
+    /// workspace is connected to the same host, otherwise as `ssh <host>` would.
+    @MainActor
+    static func connection(to host: String, from workspace: Workspace?) -> CodeEditorRemoteHost {
+        guard let configuration = workspace?.remoteConfiguration,
+              configuration.transport == .ssh, configuration.destination == host else {
+            return .host(destination: host)
+        }
+        let arguments = configuration.batchSSHCommandArguments(
+            command: "", effectiveSSHOptions: configuration.sshOptions
+        )
+        return CodeEditorRemoteHost(
+            name: host,
+            sshArguments: Array(arguments.dropLast()),
+            environment: configuration.sshProcessEnvironment
+        )
+    }
+}
+
+extension FilePreviewPanel {
+    /// What the tab's header shows as its path: `host:path` for a remote folder.
+    var headerPath: String {
+        FilePreviewRemoteFolders.remoteFolder(forStandIn: filePath).map { "\($0.host):\($0.path)" } ?? filePath
+    }
+
+    /// The folder this tab shows as a project, on this Mac or on a remote host.
+    @MainActor
+    var editorProject: CodeEditorProject {
+        guard let remote = FilePreviewRemoteFolders.remoteFolder(forStandIn: filePath) else {
+            return CodeEditorProject(rootPath: filePath)
+        }
+        return CodeEditorProject(
+            rootPath: remote.path,
+            remote: FilePreviewRemoteFolders.connection(to: remote.host, from: tabMetadataHost as? Workspace)
+        )
+    }
+}
+
 /// The editors of open folder tabs. A folder tab's open files and unsaved
 /// edits live in its editor, so the editor is kept for as long as the tab
 /// exists, also while the tab is off screen in another workspace.
@@ -105,7 +181,7 @@ struct FilePreviewProjectEditor: View {
             ProjectEditorView(
                 coordinator: FilePreviewProjectEditors.coordinator(for: panel),
                 assetDirectory: assetDirectory,
-                project: CodeEditorProject(rootPath: panel.filePath),
+                project: panel.editorProject,
                 options: CodeEditorOptions(
                     wordWrap: wordWrap,
                     lineNumbers: lineNumbers,
