@@ -3,9 +3,18 @@ import Foundation
 public import WebKit
 
 /// Owns the web editor's `WKWebView` and the message bridge to it.
+///
+/// A single-file editor makes its own and drops it with its view. A project
+/// editor is handed one by its owner, because the page holds the open files
+/// and their unsaved edits: the owner keeps it while the folder is open and
+/// calls `close()` when it is closed.
 @MainActor
 public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private static let messageHandlerName = "cmuxCodeEditor"
+
+    public override init() {
+        super.init()
+    }
 
     private(set) var webView: CodeEditorWebView?
     private var isReady = false
@@ -103,7 +112,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         flush()
     }
 
-    func close() {
+    /// Tears down the web view and stops the language servers.
+    public func close() {
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.messageHandlerName)
         webView.navigationDelegate = nil

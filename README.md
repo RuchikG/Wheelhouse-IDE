@@ -52,6 +52,7 @@ tree on the left, a strip of the files you have opened from it, and the editor.
   folder with more than 20,000 files is searched only in part.
 - The files a folder had open, and which one was showing, come back when the folder is opened
   again, also after a restart. Unsaved edits do not.
+- A folder tab keeps its open files and unsaved edits while another workspace is showing.
 - ⌘S saves the open file. A dot marks a file with unsaved edits, and the tab itself shows one
   while any file has them. Closing such a file asks whether to save.
 - If something else (an agent, a terminal command) changed a file after it was opened here, saving

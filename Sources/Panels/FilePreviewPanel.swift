@@ -1365,6 +1365,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         cloudPreviewProviderIdentity = nil
         isClosed = true
         discardUntitledFileIfClosedByUser()
+        FilePreviewProjectEditors.close(self)
         unbindTabMetadata()
         stopWatchingForFileChanges()
         textLoadCoordinator.cancel()

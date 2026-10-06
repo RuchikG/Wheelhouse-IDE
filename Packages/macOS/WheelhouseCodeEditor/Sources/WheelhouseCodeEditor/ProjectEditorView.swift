@@ -4,7 +4,12 @@ public import SwiftUI
 
 /// A folder as an editor: a file tree, the files opened from it and one
 /// Monaco editor, hosted in a web view. Files are read and saved by the view.
+///
+/// The view can leave the screen and come back (its tab's workspace is
+/// switched away from) without losing the open files, because the web view
+/// lives in the coordinator the owner passes in.
 public struct ProjectEditorView: NSViewRepresentable {
+    private let coordinator: CodeEditorCoordinator
     private let assetDirectory: URL
     private let project: CodeEditorProject
     private let options: CodeEditorOptions
@@ -15,11 +20,14 @@ public struct ProjectEditorView: NSViewRepresentable {
     private let onAttach: @MainActor (_ root: NSView, _ responder: NSView) -> Void
 
     /// - Parameters:
+    ///   - coordinator: Holds the editor for as long as the folder is open.
+    ///     The owner closes it; this view never does.
     ///   - assetDirectory: Directory holding `code-editor.html` and its bundle.
     ///   - onDirtyChange: Whether any open file has unsaved edits, when that changes.
     ///   - onAttach: The container and the view that takes keyboard focus,
     ///     reported whenever the editor is (re)attached.
     public init(
+        coordinator: CodeEditorCoordinator,
         assetDirectory: URL,
         project: CodeEditorProject,
         options: CodeEditorOptions,
@@ -29,6 +37,7 @@ public struct ProjectEditorView: NSViewRepresentable {
         onPointerDown: @escaping @MainActor () -> Void = {},
         onAttach: @escaping @MainActor (_ root: NSView, _ responder: NSView) -> Void = { _, _ in }
     ) {
+        self.coordinator = coordinator
         self.assetDirectory = assetDirectory
         self.project = project
         self.options = options
@@ -40,7 +49,7 @@ public struct ProjectEditorView: NSViewRepresentable {
     }
 
     public func makeCoordinator() -> CodeEditorCoordinator {
-        CodeEditorCoordinator()
+        coordinator
     }
 
     public func makeNSView(context: Context) -> NSView {
@@ -52,10 +61,6 @@ public struct ProjectEditorView: NSViewRepresentable {
     public func updateNSView(_ nsView: NSView, context: Context) {
         guard let host = nsView as? CodeEditorHostView else { return }
         apply(to: host, coordinator: context.coordinator)
-    }
-
-    public static func dismantleNSView(_ nsView: NSView, coordinator: CodeEditorCoordinator) {
-        coordinator.close()
     }
 
     private func apply(to host: CodeEditorHostView, coordinator: CodeEditorCoordinator) {

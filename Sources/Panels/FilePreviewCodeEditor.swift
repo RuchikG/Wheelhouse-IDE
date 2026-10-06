@@ -61,6 +61,25 @@ struct FilePreviewCodeEditor: View {
     }
 }
 
+/// The editors of open folder tabs. A folder tab's open files and unsaved
+/// edits live in its editor, so the editor is kept for as long as the tab
+/// exists, also while the tab is off screen in another workspace.
+@MainActor
+enum FilePreviewProjectEditors {
+    private static var coordinators: [UUID: CodeEditorCoordinator] = [:]
+
+    static func coordinator(for panel: FilePreviewPanel) -> CodeEditorCoordinator {
+        if let coordinator = coordinators[panel.id] { return coordinator }
+        let coordinator = CodeEditorCoordinator()
+        coordinators[panel.id] = coordinator
+        return coordinator
+    }
+
+    static func close(_ panel: FilePreviewPanel) {
+        coordinators.removeValue(forKey: panel.id)?.close()
+    }
+}
+
 /// Renderer for a `FilePreviewPanel` whose path is a folder: the project
 /// editor, which lists, opens and saves the folder's files itself.
 struct FilePreviewProjectEditor: View {
@@ -81,8 +100,10 @@ struct FilePreviewProjectEditor: View {
         .appendingPathComponent("webviews-app", isDirectory: true)
 
     var body: some View {
-        if let assetDirectory = Self.assetDirectory {
+        // A closed tab has given up its editor; drawing it again would start a new one.
+        if let assetDirectory = Self.assetDirectory, !panel.isClosed {
             ProjectEditorView(
+                coordinator: FilePreviewProjectEditors.coordinator(for: panel),
                 assetDirectory: assetDirectory,
                 project: CodeEditorProject(rootPath: panel.filePath),
                 options: CodeEditorOptions(
