@@ -8,7 +8,7 @@ export type CodeEditorHostMessage =
   | { type: "reveal"; line: number; column: number }
   | { type: "lspState"; server: string; state: "open" | "closed" | "unavailable" }
   | { type: "lsp"; server: string; message: unknown }
-  | { type: "project"; root: string; name: string }
+  | { type: "project"; root: string; name: string; openFiles?: string[]; activeFile?: string }
   | ({ type: "fsResult"; id: number } & FileResult)
   | { type: "confirmResult"; id: number; choice: "save" | "discard" | "cancel" };
 
@@ -21,8 +21,21 @@ export type FileResult = {
   content?: string;
   modified?: number;
   readOnly?: boolean;
+  /** For `index`: files as paths relative to the project root, and whether that is all of them. */
+  paths?: string[];
+  complete?: boolean;
   error?: string;
 };
+
+export type FileOperation =
+  | "list"
+  | "read"
+  | "write"
+  | "createFile"
+  | "createDirectory"
+  | "move"
+  | "trash"
+  | "index";
 
 export type CodeEditorOptions = {
   wordWrap: boolean;
@@ -48,7 +61,8 @@ export type CodeEditorWebMessage =
   | { type: "openFile"; path: string; line: number; column: number }
   | { type: "lspStart"; server: string }
   | { type: "lsp"; server: string; json: string }
-  | { type: "fs"; id: number; op: "list" | "read" | "write"; path: string; content?: string; modified?: number }
+  | { type: "fs"; id: number; op: FileOperation; path: string; content?: string; modified?: number; to?: string }
+  | { type: "projectFiles"; open: string[]; active: string | null }
   | { type: "confirmClose"; id: number; name: string }
   | { type: "projectDirty"; dirty: boolean };
 

@@ -32,6 +32,28 @@ export class HostRequests {
     return this.request((id) => postToHost({ type: "fs", id, op: "write", path, content, modified }));
   }
 
+  createFile(path: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "createFile", path }));
+  }
+
+  createDirectory(path: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "createDirectory", path }));
+  }
+
+  move(path: string, to: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "move", path, to }));
+  }
+
+  /** The host asks before it moves anything to the Trash; `cancelled` is the error when the answer is no. */
+  trash(path: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "trash", path }));
+  }
+
+  /** Every file of the project, as paths relative to `root`. */
+  index(root: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "index", path: root }));
+  }
+
   confirmClose(name: string): Promise<CloseChoice> {
     return this.request((id) => postToHost({ type: "confirmClose", id, name }));
   }

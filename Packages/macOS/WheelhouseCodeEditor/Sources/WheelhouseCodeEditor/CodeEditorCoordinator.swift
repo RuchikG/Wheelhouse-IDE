@@ -127,11 +127,15 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         }
         if let project, project != sentProject {
             sentProject = project
-            send([
+            let session = ProjectEditorSession.load(root: project.rootPath)
+            var message: [String: Any] = [
                 "type": "project",
                 "root": project.rootPath,
                 "name": (project.rootPath as NSString).lastPathComponent,
-            ])
+                "openFiles": session.openFiles,
+            ]
+            message["activeFile"] = session.activeFile
+            send(message)
         }
         if let document, let sequence = sync.outgoingSequence(for: document) {
             send([
@@ -201,10 +205,18 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         let files = ProjectFileSystem(root: project?.rootPath)
         let content = body["content"] as? String
         let expectedModified = body["modified"] as? Double
+        let destination = body["to"] as? String
+        if operation == "trash", !confirmTrash(path) {
+            send(FileReply.failed("cancelled").message(id: id))
+            return
+        }
         let generation = pageGeneration
         Task { [weak self] in
             let reply = await Task.detached { () -> FileReply in
-                Self.perform(operation, path: path, content: content, expectedModified: expectedModified, in: files)
+                Self.perform(
+                    operation, path: path, content: content, expectedModified: expectedModified,
+                    destination: destination, in: files
+                )
             }.value
             guard let self, self.pageGeneration == generation else { return }
             if case .changedOnDisk = reply, let content {
@@ -219,6 +231,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         case entries([ProjectFileSystem.Entry])
         case file(ProjectFileSystem.File)
         case written(Double)
+        case index([String], isComplete: Bool)
+        case done
         case changedOnDisk
         case failed(String)
 
@@ -233,6 +247,11 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 message["readOnly"] = file.isReadOnly
             case .written(let modified):
                 message["modified"] = modified
+            case .index(let paths, let isComplete):
+                message["paths"] = paths
+                message["complete"] = isComplete
+            case .done:
+                break
             case .changedOnDisk:
                 message["ok"] = false
                 message["error"] = "changedOnDisk"
@@ -249,6 +268,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         path: String,
         content: String?,
         expectedModified: Double?,
+        destination: String? = nil,
         in files: ProjectFileSystem
     ) -> FileReply {
         do {
@@ -260,6 +280,22 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             case "write":
                 guard let content else { return .failed("unreadable") }
                 return .written(try files.write(content, to: path, expectedModified: expectedModified))
+            case "createFile":
+                try files.createFile(path)
+                return .done
+            case "createDirectory":
+                try files.createDirectory(path)
+                return .done
+            case "move":
+                guard let destination, destination.hasPrefix("/") else { return .failed("unreadable") }
+                try files.move(path, to: destination)
+                return .done
+            case "trash":
+                try files.trash(path)
+                return .done
+            case "index":
+                let index = try files.index()
+                return .index(index.paths, isComplete: index.isComplete)
             default:
                 return .failed("unsupported")
             }
@@ -271,6 +307,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             return .failed("tooLarge")
         } catch ProjectFileSystem.Failure.outsideProject {
             return .failed("outsideProject")
+        } catch ProjectFileSystem.Failure.exists {
+            return .failed("exists")
         } catch {
             return .failed("unreadable")
         }
@@ -295,6 +333,30 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         }
         let reply = Self.perform("write", path: path, content: content, expectedModified: nil, in: files)
         send(reply.message(id: id))
+    }
+
+    private func confirmTrash(_ path: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = String(
+            localized: "wheelhouse.project.trash.title",
+            defaultValue: "Move “\((path as NSString).lastPathComponent)” to the Trash?"
+        )
+        alert.informativeText = String(
+            localized: "wheelhouse.project.trash.message",
+            defaultValue: "You can restore it from the Trash."
+        )
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.trash.confirm", defaultValue: "Move to Trash"))
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.trash.cancel", defaultValue: "Cancel"))
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Remembers which files the project page has open.
+    private func saveProjectSession(_ body: [String: Any]) {
+        guard let project else { return }
+        ProjectEditorSession(
+            openFiles: (body["open"] as? [String] ?? []).filter { $0.hasPrefix("/") },
+            activeFile: body["active"] as? String
+        ).save(root: project.rootPath)
     }
 
     /// Asks what to do with unsaved edits in a file the page is about to close.
@@ -460,6 +522,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             handleFileRequest(body)
         case "confirmClose":
             confirmClose(body)
+        case "projectFiles":
+            saveProjectSession(body)
         case "projectDirty":
             onProjectDirtyChange?(body["dirty"] as? Bool ?? false)
         case "openFile":

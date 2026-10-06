@@ -196,11 +196,76 @@ import Testing
         #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.list(root.path) }
     }
 
+    @Test func createsRenamesAndTrashesInsideTheProject() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.path + "/pkg"
+        try files.createDirectory(folder)
+        try files.createFile(folder + "/a.go")
+        #expect(throws: ProjectFileSystem.Failure.exists) { try files.createFile(folder + "/a.go") }
+        try files.move(folder + "/a.go", to: folder + "/b.go")
+        #expect(try files.list(folder).map(\.name) == ["b.go"])
+        #expect(throws: ProjectFileSystem.Failure.exists) { try files.move(folder + "/b.go", to: root.path + "/README.md") }
+        try files.trash(folder + "/b.go")
+        #expect(try files.list(folder).isEmpty)
+    }
+
+    @Test func fileOperationsStayInsideTheProject() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = root.deletingLastPathComponent().path + "/outside-\(UUID().uuidString)"
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.createFile(outside) }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.createDirectory(outside) }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.move(root.path + "/README.md", to: outside) }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.move(root.path, to: root.path + "/inner") }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.trash(root.path) }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try ProjectFileSystem(root: nil).index() }
+    }
+
+    @Test func indexesFilesByRelativePath() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("node_modules/dep"), withIntermediateDirectories: true
+        )
+        try Data("x".utf8).write(to: root.appendingPathComponent("node_modules/dep/index.js"))
+        try Data("x".utf8).write(to: root.appendingPathComponent(".git/config"))
+        let index = try files.index()
+        #expect(index.paths == ["a2.txt", "a10.txt", "cmd/app/main.go", "README.md"])
+        #expect(index.isComplete)
+    }
+
     @Test func refusesBinaryFiles() throws {
         let (root, files) = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
         let path = root.path + "/image.bin"
         try Data([0x89, 0x50, 0x00, 0x01]).write(to: URL(fileURLWithPath: path))
         #expect(throws: ProjectFileSystem.Failure.notText) { try files.read(path) }
+    }
+}
+
+@Suite struct ProjectEditorSessionTests {
+    private func makeDefaults() -> (UserDefaults, String) {
+        let name = "project-session-\(UUID().uuidString)"
+        return (UserDefaults(suiteName: name)!, name)
+    }
+
+    @Test func remembersOpenFilesPerFolder() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let session = ProjectEditorSession(openFiles: ["/proj/a.go", "/proj/b.go"], activeFile: "/proj/b.go")
+        session.save(root: "/proj", to: defaults)
+        ProjectEditorSession(openFiles: ["/other/x.go"]).save(root: "/other", to: defaults)
+        #expect(ProjectEditorSession.load(root: "/proj", from: defaults) == session)
+        #expect(ProjectEditorSession.load(root: "/other", from: defaults).activeFile == nil)
+        #expect(ProjectEditorSession.load(root: "/unknown", from: defaults) == ProjectEditorSession())
+    }
+
+    @Test func forgetsAFolderWithNothingOpen() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        ProjectEditorSession(openFiles: ["/proj/a.go"]).save(root: "/proj", to: defaults)
+        ProjectEditorSession().save(root: "/proj", to: defaults)
+        #expect(defaults.dictionary(forKey: ProjectEditorSession.defaultsKey)?.isEmpty == true)
     }
 }

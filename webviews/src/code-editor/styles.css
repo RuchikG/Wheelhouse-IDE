@@ -204,3 +204,98 @@ body,
 .project [hidden] {
   display: none;
 }
+
+/* Finding a file by name: the field above the tree and its matches. */
+.project-find {
+  flex: none;
+  margin: 6px 8px 2px;
+  padding: 3px 6px;
+  border: 1px solid var(--project-line);
+  border-radius: 5px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.project-find:focus {
+  border-color: var(--project-muted);
+}
+
+.project-results {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.project-result {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 22px;
+  padding: 0 8px 0 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project-result:hover {
+  background: var(--project-hover);
+}
+
+.project-result-selected {
+  background: var(--project-selected);
+}
+
+.project-result-name {
+  flex: none;
+}
+
+.project-result-folder {
+  overflow: hidden;
+  color: var(--project-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.project-results-note {
+  padding: 6px 10px;
+  color: var(--project-muted);
+}
+
+/* Naming a new or renamed item in the tree. */
+.project-row-input {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--project-muted);
+  border-radius: 3px;
+  outline: none;
+  background: var(--project-background, Canvas);
+  color: inherit;
+  font: inherit;
+}
+
+.project-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid var(--project-line);
+  border-radius: 7px;
+  background: var(--project-background, Canvas);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 30%);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.project-menu-item {
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.project-menu-item:hover {
+  background: var(--project-selected);
+}

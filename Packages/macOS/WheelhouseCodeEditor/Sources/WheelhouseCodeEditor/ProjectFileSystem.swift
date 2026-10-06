@@ -23,11 +23,17 @@ struct ProjectFileSystem: Sendable {
         case tooLarge
         /// The file changed on disk after the editor read it.
         case changedOnDisk
+        /// Something already has the name a new or renamed item asked for.
+        case exists
         case unreadable(String)
     }
 
     static let maximumFileSize = 8 * 1024 * 1024
+    /// How many paths `index` returns at most.
+    static let maximumIndexedFiles = 20_000
     private static let hiddenNames: Set<String> = [".git", ".DS_Store"]
+    /// Folders whose contents are not worth finding files in.
+    private static let unindexedNames: Set<String> = [".git", "node_modules"]
 
     let root: String?
 
@@ -94,6 +100,80 @@ struct ProjectFileSystem: Sendable {
             throw Failure.unreadable(error.localizedDescription)
         }
         return Self.modified(path)
+    }
+
+    func createFile(_ path: String) throws {
+        try requireNew(path)
+        guard FileManager.default.createFile(atPath: path, contents: Data()) else {
+            throw Failure.unreadable("could not create \(path)")
+        }
+    }
+
+    func createDirectory(_ path: String) throws {
+        try requireNew(path)
+        do {
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: false)
+        } catch {
+            throw Failure.unreadable(error.localizedDescription)
+        }
+    }
+
+    /// Renames or moves a file or folder inside the project.
+    func move(_ path: String, to destination: String) throws {
+        guard contains(path), !isRoot(path) else { throw Failure.outsideProject }
+        // A change of letter case names the same item on a case-insensitive volume.
+        if path.lowercased() != destination.lowercased() {
+            try requireNew(destination)
+        } else {
+            guard contains(destination) else { throw Failure.outsideProject }
+        }
+        do {
+            try FileManager.default.moveItem(atPath: path, toPath: destination)
+        } catch {
+            throw Failure.unreadable(error.localizedDescription)
+        }
+    }
+
+    func trash(_ path: String) throws {
+        guard contains(path), !isRoot(path) else { throw Failure.outsideProject }
+        do {
+            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+        } catch {
+            throw Failure.unreadable(error.localizedDescription)
+        }
+    }
+
+    /// Every file under the root as a path relative to it, sorted, for finding
+    /// a file by name. Stops at `maximumIndexedFiles`.
+    func index() throws -> (paths: [String], isComplete: Bool) {
+        guard let root else { throw Failure.outsideProject }
+        guard let walker = FileManager.default.enumerator(atPath: root) else { throw Failure.unreadable(root) }
+        var paths: [String] = []
+        var isComplete = true
+        for case let path as String in walker {
+            let name = (path as NSString).lastPathComponent
+            if walker.fileAttributes?[.type] as? FileAttributeType == .typeDirectory {
+                if Self.unindexedNames.contains(name) { walker.skipDescendants() }
+                continue
+            }
+            if Self.hiddenNames.contains(name) { continue }
+            if paths.count == Self.maximumIndexedFiles {
+                isComplete = false
+                break
+            }
+            paths.append(path)
+        }
+        return (paths.sorted { $0.localizedStandardCompare($1) == .orderedAscending }, isComplete)
+    }
+
+    private func isRoot(_ path: String) -> Bool {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path == root
+    }
+
+    /// `path` must be inside the project and not exist yet.
+    private func requireNew(_ path: String) throws {
+        guard contains((path as NSString).deletingLastPathComponent) else { throw Failure.outsideProject }
+        guard !FileManager.default.fileExists(atPath: path) else { throw Failure.exists }
     }
 
     private static func modified(_ path: String) -> Double {

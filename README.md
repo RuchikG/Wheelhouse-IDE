@@ -44,6 +44,14 @@ tree on the left, a strip of the files you have opened from it, and the editor.
 
 - Folders load when expanded. `.git` is hidden. The tree and the open file are refreshed when the
   window regains focus, and with the ↻ button.
+- Right-click in the tree for New File…, New Folder…, Rename… and Move to Trash. Names are typed
+  in place: Return accepts, Escape gives up. An open file follows its rename, unsaved edits
+  included; a file moved to the Trash leaves the strip.
+- "Find file" above the tree lists the files whose path contains every word you type, names
+  first. ↑ and ↓ move, Return opens, Escape clears. `.git` and `node_modules` are left out, and a
+  folder with more than 20,000 files is searched only in part.
+- The files a folder had open, and which one was showing, come back when the folder is opened
+  again, also after a restart. Unsaved edits do not.
 - ⌘S saves the open file. A dot marks a file with unsaved edits, and the tab itself shows one
   while any file has them. Closing such a file asks whether to save.
 - If something else (an agent, a terminal command) changed a file after it was opened here, saving
@@ -81,8 +89,8 @@ logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
 
 Not there yet:
 
-- A folder tab does not remember its open files across a restart, and has no file search,
-  create, rename or delete yet.
+- A folder tab cannot search inside files or move a file to another folder, and it does not
+  remember which folders were expanded.
 - If a language server exits, its features stay off in that tab until the tab is reopened.
 - Remote files are read-only, as in cmux.
 - Markdown source editing still uses the native editor.

@@ -8,8 +8,11 @@ import {
   reveal,
   startOf,
 } from "./editorChrome";
+import { invalidName, isWithin, movedPath } from "./fileFinder";
 import { HostRequests } from "./hostRequests";
 import { LanguageClients } from "./languageClient";
+import { FileFinder } from "./projectFinder";
+import { showMenu, type MenuItem } from "./projectMenu";
 
 type OpenFile = {
   path: string;
@@ -33,6 +36,14 @@ function element(tag: string, className: string, text?: string): HTMLElement {
     node.textContent = text;
   }
   return node;
+}
+
+function baseName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+function parentOf(path: string): string {
+  return path.slice(0, path.lastIndexOf("/"));
 }
 
 function failureText(name: string, error: string | undefined): string {
@@ -70,6 +81,11 @@ export class ProjectEditor {
   private active: OpenFile | undefined;
   private tabWidth: number | undefined;
   private reportedDirty = false;
+  /** The open files as last told to the host, which remembers them for the next launch. */
+  private reportedFiles = "";
+  private isRestoring = false;
+  /** A name is being typed into the tree, which must not be redrawn under it. */
+  private isNaming = false;
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly treeTitle = element("div", "project-tree-title");
@@ -78,8 +94,18 @@ export class ProjectEditor {
   private readonly notice = element("div", "project-notice");
   private readonly editorHost = element("div", "project-editor");
   private readonly empty = element("div", "project-empty", "Select a file to open it");
+  private readonly finder = new FileFinder(
+    async () => {
+      const result = await this.host.index(this.root);
+      return { paths: result.paths ?? [], isComplete: result.complete ?? true };
+    },
+    (path) => void this.openFile(`${this.root}/${path}`),
+    (isSearching) => {
+      this.treeList.hidden = isSearching;
+    },
+  );
 
-  constructor(container: HTMLElement) {
+  constructor(private readonly container: HTMLElement) {
     container.classList.add("project");
     const tree = element("aside", "project-tree");
     const refresh = element("button", "project-tree-refresh", "↻");
@@ -87,7 +113,7 @@ export class ProjectEditor {
     refresh.addEventListener("click", () => void this.renderTree());
     const header = element("div", "project-tree-header");
     header.append(this.treeTitle, refresh);
-    tree.append(header, this.treeList);
+    tree.append(header, this.finder.input, this.finder.list, this.treeList);
     const resizer = element("div", "project-resizer");
     const main = element("main", "project-main");
     this.notice.hidden = true;
@@ -109,6 +135,7 @@ export class ProjectEditor {
     });
 
     this.treeList.addEventListener("click", (event) => this.handleTreeClick(event));
+    this.treeList.addEventListener("contextmenu", (event) => this.showTreeMenu(event));
     this.strip.addEventListener("click", (event) => this.handleStripClick(event));
     this.strip.addEventListener("auxclick", (event) => this.handleStripClick(event));
     window.addEventListener("focus", () => {
@@ -129,6 +156,9 @@ export class ProjectEditor {
         this.treeTitle.textContent = message.name;
         this.treeTitle.title = message.root;
         void this.renderTree();
+        if (this.files.size === 0) {
+          void this.restore(message.openFiles ?? [], message.activeFile);
+        }
         break;
       case "options":
         this.applyOptions(message.options);
@@ -139,7 +169,8 @@ export class ProjectEditor {
         document.documentElement.style.setProperty("--project-foreground", message.theme.foreground);
         break;
       case "focus":
-        if (this.active) {
+        // The keyboard stays with a field the user is typing in: the finder, a name in the tree.
+        if (this.active && !(document.activeElement instanceof HTMLInputElement)) {
           this.editor.focus();
         }
         break;
@@ -164,7 +195,7 @@ export class ProjectEditor {
 
   /** Lists the root and every expanded folder again, then swaps the tree in. */
   private async renderTree(): Promise<void> {
-    if (!this.root) {
+    if (!this.root || this.isNaming) {
       return;
     }
     const rows = new Map<string, HTMLElement>();
@@ -209,7 +240,7 @@ export class ProjectEditor {
   private handleTreeClick(event: MouseEvent): void {
     const row = (event.target as HTMLElement).closest<HTMLElement>(".project-row");
     const path = row?.dataset.path;
-    if (!row || !path) {
+    if (!row || !path || this.isNaming) {
       return;
     }
     if (!row.classList.contains("project-row-directory")) {
@@ -250,7 +281,227 @@ export class ProjectEditor {
     }
   }
 
+  // Changing the tree
+
+  private showTreeMenu(event: MouseEvent): void {
+    event.preventDefault();
+    if (!this.root || this.isNaming) {
+      return;
+    }
+    const row = (event.target as HTMLElement).closest<HTMLElement>(".project-row");
+    const path = row?.dataset.path;
+    const folder = !row || !path ? this.root : row.classList.contains("project-row-directory") ? path : parentOf(path);
+    const items: MenuItem[] = [
+      { label: "New File…", run: () => void this.create("file", folder) },
+      { label: "New Folder…", run: () => void this.create("folder", folder) },
+    ];
+    if (path) {
+      items.push(
+        { label: "Rename…", run: () => void this.rename(path) },
+        { label: "Move to Trash", run: () => void this.trash(path) },
+      );
+    }
+    showMenu(this.container, event.clientX, event.clientY, items);
+  }
+
+  /**
+   * Takes a name typed into `row`. Return accepts it, Escape or clicking away
+   * gives it up, which resolves to undefined.
+   */
+  private askName(row: HTMLElement, current: string): Promise<string | undefined> {
+    const input = document.createElement("input");
+    input.className = "project-row-input";
+    input.value = current;
+    input.spellcheck = false;
+    row.append(input);
+    this.isNaming = true;
+    input.focus();
+    const dot = current.lastIndexOf(".");
+    input.setSelectionRange(0, dot > 0 ? dot : current.length);
+    return new Promise((resolve) => {
+      const finish = (name: string | undefined) => {
+        if (!this.isNaming) {
+          return;
+        }
+        this.isNaming = false;
+        input.remove();
+        resolve(name);
+      };
+      input.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          finish(undefined);
+        } else if (event.key === "Enter") {
+          const name = input.value.trim();
+          const problem = invalidName(name);
+          if (problem) {
+            this.showNotice(problem);
+          } else {
+            finish(name);
+          }
+        }
+      });
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("blur", () => finish(undefined));
+    });
+  }
+
+  private async create(kind: "file" | "folder", folder: string): Promise<void> {
+    if (folder !== this.root && !this.expanded.has(folder)) {
+      this.expanded.add(folder);
+      await this.renderTree();
+    }
+    const folderRow = this.rows.get(folder);
+    const children = folder === this.root ? this.treeList : folderRow?.nextElementSibling;
+    if (!children) {
+      return;
+    }
+    const depth = folderRow ? Number(folderRow.dataset.depth ?? 0) + 1 : 0;
+    const row = element("div", "project-row");
+    row.style.paddingLeft = `${8 + depth * TREE_INDENT}px`;
+    row.append(element("span", "project-row-chevron", kind === "folder" ? "▸" : ""));
+    children.prepend(row);
+    const name = await this.askName(row, "");
+    row.remove();
+    if (name === undefined) {
+      return;
+    }
+    const path = `${folder}/${name}`;
+    const result = kind === "file" ? await this.host.createFile(path) : await this.host.createDirectory(path);
+    if (!result.ok) {
+      this.showNotice(result.error === "exists" ? `${name} already exists.` : `${name} could not be created.`);
+      return;
+    }
+    await this.renderTree();
+    if (kind === "file") {
+      await this.openFile(path);
+    }
+  }
+
+  private async rename(path: string): Promise<void> {
+    const row = this.rows.get(path);
+    const label = row?.querySelector<HTMLElement>(".project-row-name");
+    if (!row || !label) {
+      return;
+    }
+    const current = baseName(path);
+    label.hidden = true;
+    const name = await this.askName(row, current);
+    label.hidden = false;
+    if (name === undefined || name === current) {
+      return;
+    }
+    const destination = `${parentOf(path)}/${name}`;
+    const result = await this.host.move(path, destination);
+    if (!result.ok) {
+      this.showNotice(result.error === "exists" ? `${name} already exists.` : `${current} could not be renamed.`);
+      return;
+    }
+    this.followMove(path, destination);
+    await this.renderTree();
+  }
+
+  /** Points open files and expanded folders at their new paths after `from` became `to`. */
+  private followMove(from: string, to: string): void {
+    for (const folder of Array.from(this.expanded)) {
+      const moved = movedPath(folder, from, to);
+      if (moved !== undefined) {
+        this.expanded.delete(folder);
+        this.expanded.add(moved);
+      }
+    }
+    for (const file of Array.from(this.files.values())) {
+      const path = movedPath(file.path, from, to);
+      if (path === undefined) {
+        continue;
+      }
+      // A model is bound to its path, so the file gets a new one with the same text.
+      const wasDirty = this.isDirty(file);
+      const previous = file.model;
+      const uri = monaco.Uri.file(path);
+      const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(previous.getValue(), undefined, uri);
+      if (model.getValue() !== previous.getValue()) {
+        model.setValue(previous.getValue());
+      }
+      this.fileModels.keep(uri.toString());
+      if (this.tabWidth !== undefined) {
+        model.updateOptions({ tabSize: this.tabWidth });
+      }
+      this.files.delete(file.path);
+      file.path = path;
+      file.name = baseName(path);
+      file.model = model;
+      // No version of the new model matches the disk while there are unsaved edits.
+      file.savedVersion = wasDirty ? -1 : model.getAlternativeVersionId();
+      this.labelTab(file);
+      model.onDidChangeContent(() => this.updateDirty(file));
+      this.files.set(path, file);
+      if (this.active === file) {
+        const viewState = this.editor.saveViewState();
+        this.editor.setModel(model);
+        if (viewState) {
+          this.editor.restoreViewState(viewState);
+        }
+      }
+      this.fileModels.discard(previous.uri.toString(), previous);
+      this.languageClients.ensureFor(path);
+      this.updateDirty(file);
+    }
+    this.reportOpenFiles();
+  }
+
+  private async trash(path: string): Promise<void> {
+    const result = await this.host.trash(path);
+    if (!result.ok) {
+      if (result.error !== "cancelled") {
+        this.showNotice(`${baseName(path)} could not be moved to the Trash.`);
+      }
+      return;
+    }
+    for (const folder of Array.from(this.expanded)) {
+      if (isWithin(folder, path)) {
+        this.expanded.delete(folder);
+      }
+    }
+    for (const file of Array.from(this.files.values())) {
+      if (isWithin(file.path, path)) {
+        this.removeFile(file);
+      }
+    }
+    await this.renderTree();
+  }
+
   // Open files
+
+  /** Reopens the files the folder had open when the app last ran. */
+  private async restore(open: string[], active: string | undefined): Promise<void> {
+    this.isRestoring = true;
+    try {
+      for (const path of open) {
+        await this.loadFile(path, true);
+      }
+      const file = (active !== undefined ? this.files.get(active) : undefined) ?? this.files.values().next().value;
+      if (file && !this.active) {
+        this.activate(file, false);
+      }
+    } finally {
+      this.isRestoring = false;
+    }
+    this.reportOpenFiles();
+  }
+
+  private reportOpenFiles(): void {
+    if (this.isRestoring) {
+      return;
+    }
+    const open = [...this.strip.children].map((tab) => (tab as HTMLElement).dataset.path ?? "");
+    const active = this.active?.path ?? null;
+    const report = JSON.stringify([open, active]);
+    if (report !== this.reportedFiles) {
+      this.reportedFiles = report;
+      postToHost({ type: "projectFiles", open, active });
+    }
+  }
 
   private async openFile(path: string, position?: { line: number; column: number }): Promise<void> {
     const file = await this.loadFile(path);
@@ -263,19 +514,26 @@ export class ProjectEditor {
     }
   }
 
-  /** Adds the file to the strip without showing it. */
-  private async loadFile(path: string): Promise<OpenFile | undefined> {
+  /**
+   * Adds the file to the strip without showing it.
+   * @param isQuiet Leaves out the notice when the file cannot be read.
+   */
+  private async loadFile(path: string, isQuiet = false): Promise<OpenFile | undefined> {
     const open = this.files.get(path);
     if (open) {
       return open;
     }
-    const name = path.slice(path.lastIndexOf("/") + 1);
+    const name = baseName(path);
     const result = await this.host.read(path);
     if (!result.ok || result.content === undefined) {
-      this.showNotice(failureText(name, result.error));
+      if (!isQuiet) {
+        this.showNotice(failureText(name, result.error));
+      }
       return undefined;
     }
-    return this.files.get(path) ?? this.addFile(path, name, result);
+    const file = this.files.get(path) ?? this.addFile(path, name, result);
+    this.reportOpenFiles();
+    return file;
   }
 
   private addFile(path: string, name: string, result: FileResult): OpenFile {
@@ -291,9 +549,7 @@ export class ProjectEditor {
       model.updateOptions({ tabSize: this.tabWidth });
     }
     const tab = element("div", "project-tab");
-    tab.dataset.path = path;
-    tab.title = path.startsWith(`${this.root}/`) ? path.slice(this.root.length + 1) : path;
-    tab.append(element("span", "project-tab-name", name), element("span", "project-tab-close", "×"));
+    tab.append(element("span", "project-tab-name"), element("span", "project-tab-close", "×"));
     this.strip.append(tab);
     const file: OpenFile = {
       path,
@@ -305,13 +561,24 @@ export class ProjectEditor {
       viewState: null,
       tab,
     };
+    this.labelTab(file);
     model.onDidChangeContent(() => this.updateDirty(file));
     this.files.set(path, file);
     this.languageClients.ensureFor(path);
     return file;
   }
 
-  private activate(file: OpenFile): void {
+  private labelTab(file: OpenFile): void {
+    file.tab.dataset.path = file.path;
+    file.tab.title = file.path.startsWith(`${this.root}/`) ? file.path.slice(this.root.length + 1) : file.path;
+    const label = file.tab.querySelector(".project-tab-name");
+    if (label) {
+      label.textContent = file.name;
+    }
+  }
+
+  /** @param takesFocus False leaves the keyboard where it is. */
+  private activate(file: OpenFile, takesFocus = true): void {
     if (this.active && this.active !== file) {
       this.active.viewState = this.editor.saveViewState();
     }
@@ -331,9 +598,12 @@ export class ProjectEditor {
     }
     file.tab.scrollIntoView({ block: "nearest", inline: "nearest" });
     this.markActiveRow();
-    this.editor.focus();
+    if (takesFocus) {
+      this.editor.focus();
+    }
     if (isSwitch) {
       void this.reloadIfUnchanged(file);
+      this.reportOpenFiles();
     }
   }
 
@@ -364,6 +634,11 @@ export class ProjectEditor {
 
   private updateDirty(file: OpenFile): void {
     file.tab.classList.toggle("project-tab-dirty", this.isDirty(file));
+    this.reportDirty();
+  }
+
+  /** Tells the host whether any open file has unsaved edits, when that changes. */
+  private reportDirty(): void {
     const anyDirty = [...this.files.values()].some((open) => this.isDirty(open));
     if (anyDirty !== this.reportedDirty) {
       this.reportedDirty = anyDirty;
@@ -419,6 +694,11 @@ export class ProjectEditor {
         }
       }
     }
+    this.removeFile(file);
+  }
+
+  /** Takes the file off the strip, whatever state it is in. */
+  private removeFile(file: OpenFile): void {
     if (!this.files.delete(file.path)) {
       return;
     }
@@ -437,7 +717,8 @@ export class ProjectEditor {
       }
     }
     this.fileModels.discard(file.model.uri.toString(), file.model);
-    this.updateDirty(file);
+    this.reportDirty();
+    this.reportOpenFiles();
   }
 
   // Chrome
