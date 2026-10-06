@@ -1702,6 +1702,11 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         }
     }
 
+    /// Marks a folder tab as holding files with unsaved edits.
+    func setProjectHasUnsavedFiles(_ hasUnsavedFiles: Bool) {
+        setTabMetadataDirtyState(hasUnsavedFiles)
+    }
+
     /// Updates dirty state and emits only when the tab-facing value changes.
     private func setTabMetadataDirtyState(_ nextValue: Bool) {
         guard isDirty != nextValue else { return }
@@ -1814,6 +1819,15 @@ struct FilePreviewPanelView: View {
     private func content(previewRevision: Int) -> some View {
         if panel.isFileUnavailable {
             fileUnavailableView
+        } else if usesCodeEditor, panel.isFolder {
+            FilePreviewProjectEditor(
+                panel: panel,
+                isVisibleInUI: isVisibleInUI,
+                themeBackgroundColor: contentBackgroundColor,
+                themeForegroundColor: themeForegroundColor,
+                wordWrap: fileEditorWordWrap,
+                onRequestPanelFocus: onRequestPanelFocus
+            )
         } else {
             switch panel.previewMode {
             case .text:

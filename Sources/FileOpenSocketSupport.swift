@@ -24,7 +24,7 @@ extension TerminalController {
                 .err(code: "not_found", message: "File not found: \(filePath)", data: ["path": filePath])
             )
         }
-        guard !isDir.boolValue else {
+        guard !isDir.boolValue || FilePreviewPanel.showsFoldersAsProjects else {
             return (
                 nil,
                 .err(

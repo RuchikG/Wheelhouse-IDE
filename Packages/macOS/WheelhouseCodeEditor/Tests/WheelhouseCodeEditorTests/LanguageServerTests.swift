@@ -119,3 +119,75 @@ import Testing
         #expect(await iterator.next() == nil)
     }
 }
+
+@Suite struct ProjectFileSystemTests {
+    private func makeProject() throws -> (root: URL, files: ProjectFileSystem) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("project-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("cmd/app"), withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try Data("package main\n".utf8).write(to: root.appendingPathComponent("cmd/app/main.go"))
+        try Data("# readme\n".utf8).write(to: root.appendingPathComponent("README.md"))
+        try Data("x".utf8).write(to: root.appendingPathComponent("a10.txt"))
+        try Data("x".utf8).write(to: root.appendingPathComponent("a2.txt"))
+        return (root, ProjectFileSystem(root: root.path))
+    }
+
+    @Test func listsFoldersFirstAndHidesGitData() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try files.list(files.root).map(\.name) == ["cmd", "a2.txt", "a10.txt", "README.md"])
+        #expect(try files.list(files.root).first?.isDirectory == true)
+    }
+
+    @Test func readsAndSavesFilesInTheProject() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = files.root + "/cmd/app/main.go"
+        let file = try files.read(path)
+        #expect(file.content == "package main\n")
+        #expect(!file.isReadOnly)
+        _ = try files.write("package app\n", to: path, expectedModified: file.modified)
+        #expect(try files.read(path).content == "package app\n")
+    }
+
+    @Test func refusesToSaveOverAChangeMadeElsewhere() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = files.root + "/README.md"
+        let file = try files.read(path)
+        try Data("# changed elsewhere\n".utf8).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: file.modified + 60)], ofItemAtPath: path
+        )
+        #expect(throws: ProjectFileSystem.Failure.changedOnDisk) {
+            try files.write("# mine\n", to: path, expectedModified: file.modified)
+        }
+        _ = try files.write("# mine\n", to: path, expectedModified: nil)
+        #expect(try files.read(path).content == "# mine\n")
+    }
+
+    @Test func filesOutsideTheProjectAreReadOnly() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = root.deletingLastPathComponent().appendingPathComponent("outside-\(UUID().uuidString).go")
+        try Data("package x\n".utf8).write(to: outside)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        #expect(try files.read(outside.path).isReadOnly)
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) {
+            try files.write("package y\n", to: outside.path, expectedModified: nil)
+        }
+        #expect(throws: ProjectFileSystem.Failure.outsideProject) { try files.list(outside.deletingLastPathComponent().path) }
+        #expect(!files.contains(files.root + "-sibling/file.go"))
+    }
+
+    @Test func refusesBinaryFiles() throws {
+        let (root, files) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = files.root + "/image.bin"
+        try Data([0x89, 0x50, 0x00, 0x01]).write(to: URL(fileURLWithPath: path))
+        #expect(throws: ProjectFileSystem.Failure.notText) { try files.read(path) }
+    }
+}

@@ -1,22 +1,9 @@
 import * as monaco from "monaco-editor";
-import {
-  postToHost,
-  type CodeEditorHostMessage,
-  type CodeEditorOptions,
-  type CodeEditorTheme,
-} from "./bridge";
+import { postToHost, type CodeEditorHostMessage, type CodeEditorOptions } from "./bridge";
+import { applyEditorOptions, applyEditorTheme, createMonacoEditor, reveal, startOf } from "./editorChrome";
 import { LanguageClients } from "./languageClient";
 
-const THEME_NAME = "cmux-host";
 const CHANGE_DEBOUNCE_MS = 120;
-
-// This module lands in `chunks/codeEditorSurface.mjs`; the worker entry is
-// emitted next to it.
-const editorWorkerURL = new URL(/* @vite-ignore */ "./monaco-editor-worker.mjs", import.meta.url);
-
-(globalThis as { MonacoEnvironment?: monaco.Environment }).MonacoEnvironment = {
-  getWorker: () => new Worker(editorWorkerURL, { type: "module" }),
-};
 
 /**
  * Owns the Monaco instance for one file and keeps it in sync with the native
@@ -32,13 +19,7 @@ export class CodeEditor {
   private tabWidth: number | undefined;
 
   constructor(container: HTMLElement) {
-    this.editor = monaco.editor.create(container, {
-      automaticLayout: true,
-      fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-      fontSize: 13,
-      scrollBeyondLastLine: false,
-      stickyScroll: { enabled: false },
-    });
+    this.editor = createMonacoEditor(container);
     this.editor.onDidChangeModelContent(() => {
       if (!this.applyingHostDocument) {
         this.scheduleChange();
@@ -51,16 +32,7 @@ export class CodeEditor {
         if (resource.scheme !== "file") {
           return false;
         }
-        let line = 1;
-        let column = 1;
-        if (selectionOrPosition && "lineNumber" in selectionOrPosition) {
-          line = selectionOrPosition.lineNumber;
-          column = selectionOrPosition.column;
-        } else if (selectionOrPosition) {
-          line = selectionOrPosition.startLineNumber;
-          column = selectionOrPosition.startColumn;
-        }
-        postToHost({ type: "openFile", path: resource.fsPath, line, column });
+        postToHost({ type: "openFile", path: resource.fsPath, ...startOf(selectionOrPosition) });
         return true;
       },
     });
@@ -75,7 +47,7 @@ export class CodeEditor {
         this.applyOptions(message.options);
         break;
       case "theme":
-        this.applyTheme(message.theme);
+        applyEditorTheme(message.theme);
         break;
       case "focus":
         this.editor.focus();
@@ -83,13 +55,9 @@ export class CodeEditor {
       case "requestSave":
         this.save();
         break;
-      case "reveal": {
-        const position = { lineNumber: message.line, column: message.column };
-        this.editor.setPosition(position);
-        this.editor.revealPositionInCenter(position);
-        this.editor.focus();
+      case "reveal":
+        reveal(this.editor, message.line, message.column);
         break;
-      }
       case "lspState":
         this.languageClients.receiveState(message.server, message.state);
         break;
@@ -133,31 +101,9 @@ export class CodeEditor {
   }
 
   private applyOptions(options: CodeEditorOptions): void {
-    this.editor.updateOptions({
-      wordWrap: options.wordWrap ? "on" : "off",
-      lineNumbers: options.lineNumbers ? "on" : "off",
-      guides: { indentation: options.indentGuides },
-      renderLineHighlight: options.currentLineHighlight ? "line" : "none",
-      fontSize: options.fontSize,
-    });
+    applyEditorOptions(this.editor, options);
     this.tabWidth = options.tabWidth;
     this.editor.getModel()?.updateOptions({ tabSize: options.tabWidth });
-  }
-
-  private applyTheme(theme: CodeEditorTheme): void {
-    monaco.editor.defineTheme(THEME_NAME, {
-      base: theme.isDark ? "vs-dark" : "vs",
-      inherit: true,
-      rules: [],
-      colors: {
-        "editor.background": theme.background,
-        "editor.foreground": theme.foreground,
-        "editorGutter.background": theme.background,
-        "minimap.background": theme.background,
-      },
-    });
-    monaco.editor.setTheme(THEME_NAME);
-    document.documentElement.style.colorScheme = theme.isDark ? "dark" : "light";
   }
 
   private scheduleChange(): void {

@@ -22,24 +22,48 @@ class HostTransport implements Transport {
   readonly state: Transport["state"];
 
   constructor(private readonly server: string) {
-    const transport = this;
-    this.state = {
-      get value() {
-        return transport.current;
+    this.state = Object.defineProperties(
+      {},
+      {
+        value: { get: () => this.current },
+        onChange: {
+          get: () => (listener: Listener<ConnectionState>) => {
+            this.stateListeners.add(listener);
+            return { dispose: () => this.stateListeners.delete(listener) };
+          },
+        },
       },
-      get onChange() {
-        return (listener: Listener<ConnectionState>) => {
-          transport.stateListeners.add(listener);
-          return { dispose: () => transport.stateListeners.delete(listener) };
-        };
-      },
-    };
+    ) as Transport["state"];
   }
 
   send(message: Message): Promise<void> {
+    if (this.answerForOtherKindOfFile(message)) {
+      return Promise.resolve();
+    }
     this.restoreDocumentURICase(message);
     postToHost({ type: "lsp", server: this.server, json: JSON.stringify(message) });
     return Promise.resolve();
+  }
+
+  /**
+   * Monaco's client reports every open file to every server. Whatever concerns
+   * a file of another kind stays here: notifications are dropped and requests
+   * answered with no result.
+   */
+  private answerForOtherKindOfFile(message: Message): boolean {
+    const outgoing = message as { id?: unknown; method?: string; params?: { textDocument?: { uri?: string } } };
+    const uri = outgoing.params?.textDocument?.uri;
+    if (typeof uri !== "string" || typeof outgoing.method !== "string") {
+      return false;
+    }
+    const path = uri.split(/[?#]/)[0];
+    if (path.toLowerCase().endsWith(`.${this.server}`)) {
+      return false;
+    }
+    if (outgoing.id !== undefined) {
+      this.receive({ jsonrpc: "2.0", id: outgoing.id, result: null } as unknown as Message);
+    }
+    return true;
   }
 
   /**

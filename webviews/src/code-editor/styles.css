@@ -8,3 +8,199 @@ body,
   overflow: hidden;
   background: transparent;
 }
+
+/* Project editor: file tree, strip of open files, editor. */
+#root.project {
+  display: flex;
+  color: var(--project-foreground, CanvasText);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+  --project-line: color-mix(in srgb, var(--project-foreground, CanvasText) 14%, transparent);
+  --project-hover: color-mix(in srgb, var(--project-foreground, CanvasText) 8%, transparent);
+  --project-selected: color-mix(in srgb, var(--project-foreground, CanvasText) 16%, transparent);
+  --project-muted: color-mix(in srgb, var(--project-foreground, CanvasText) 60%, transparent);
+}
+
+.project-tree {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  flex: none;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.project-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px 6px 10px;
+  border-bottom: 1px solid var(--project-line);
+}
+
+.project-tree-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.project-tree-refresh {
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: transparent;
+  color: var(--project-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.project-tree-refresh:hover {
+  background: var(--project-hover);
+  color: inherit;
+}
+
+.project-tree-list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.project-row {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding-right: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project-row:hover {
+  background: var(--project-hover);
+}
+
+.project-row-active {
+  background: var(--project-selected);
+}
+
+.project-row-chevron {
+  flex: none;
+  width: 14px;
+  color: var(--project-muted);
+  font-size: 10px;
+}
+
+.project-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-resizer {
+  flex: none;
+  width: 5px;
+  margin-left: -2px;
+  border-right: 1px solid var(--project-line);
+  cursor: col-resize;
+}
+
+.project-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.project-strip {
+  display: flex;
+  flex: none;
+  min-height: 29px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--project-line);
+  scrollbar-width: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.project-tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 0 6px 0 12px;
+  border-right: 1px solid var(--project-line);
+  color: var(--project-muted);
+  cursor: pointer;
+}
+
+.project-tab:hover {
+  background: var(--project-hover);
+}
+
+.project-tab-active {
+  background: var(--project-selected);
+  color: inherit;
+}
+
+.project-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-tab-close {
+  flex: none;
+  width: 16px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 16px;
+  visibility: hidden;
+}
+
+.project-tab:hover .project-tab-close,
+.project-tab-active .project-tab-close,
+.project-tab-dirty .project-tab-close {
+  visibility: visible;
+}
+
+.project-tab-close:hover {
+  background: var(--project-selected);
+}
+
+/* An unsaved file shows a dot where the close button is, until hovered. */
+.project-tab-dirty:not(:hover) .project-tab-close {
+  font-size: 0;
+}
+
+.project-tab-dirty:not(:hover) .project-tab-close::before {
+  content: "●";
+  font-size: 9px;
+}
+
+.project-notice {
+  flex: none;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--project-line);
+  background: var(--project-hover);
+}
+
+.project-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.project-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--project-muted);
+}
+
+.project [hidden] {
+  display: none;
+}

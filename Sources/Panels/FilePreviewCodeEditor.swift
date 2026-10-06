@@ -60,3 +60,48 @@ struct FilePreviewCodeEditor: View {
         }
     }
 }
+
+/// Renderer for a `FilePreviewPanel` whose path is a folder: the project
+/// editor, which lists, opens and saves the folder's files itself.
+struct FilePreviewProjectEditor: View {
+    @ObservedObject var panel: FilePreviewPanel
+    let isVisibleInUI: Bool
+    let themeBackgroundColor: NSColor
+    let themeForegroundColor: NSColor
+    let wordWrap: Bool
+    let onRequestPanelFocus: () -> Void
+
+    @LiveSetting(\.fileEditor.lineNumbers) private var lineNumbers
+    @LiveSetting(\.fileEditor.indentGuides) private var indentGuides
+    @LiveSetting(\.fileEditor.currentLineHighlight) private var currentLineHighlight
+    @LiveSetting(\.fileEditor.tabWidth) private var tabWidth
+
+    private static let assetDirectory = Bundle.main.resourceURL?
+        .appendingPathComponent("markdown-viewer", isDirectory: true)
+        .appendingPathComponent("webviews-app", isDirectory: true)
+
+    var body: some View {
+        if let assetDirectory = Self.assetDirectory {
+            ProjectEditorView(
+                assetDirectory: assetDirectory,
+                project: CodeEditorProject(rootPath: panel.filePath),
+                options: CodeEditorOptions(
+                    wordWrap: wordWrap,
+                    lineNumbers: lineNumbers,
+                    indentGuides: indentGuides,
+                    currentLineHighlight: currentLineHighlight,
+                    tabWidth: tabWidth
+                ),
+                theme: CodeEditorTheme(background: themeBackgroundColor, foreground: themeForegroundColor),
+                isVisible: isVisibleInUI,
+                onDirtyChange: { [weak panel] isDirty in
+                    panel?.setProjectHasUnsavedFiles(isDirty)
+                },
+                onPointerDown: onRequestPanelFocus,
+                onAttach: { [weak panel] root, responder in
+                    panel?.attachPreviewFocus(root: root, primaryResponder: responder, intent: .textEditor)
+                }
+            )
+        }
+    }
+}

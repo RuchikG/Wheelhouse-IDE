@@ -7,7 +7,22 @@ export type CodeEditorHostMessage =
   | { type: "requestSave" }
   | { type: "reveal"; line: number; column: number }
   | { type: "lspState"; server: string; state: "open" | "closed" | "unavailable" }
-  | { type: "lsp"; server: string; message: unknown };
+  | { type: "lsp"; server: string; message: unknown }
+  | { type: "project"; root: string; name: string }
+  | ({ type: "fsResult"; id: number } & FileResult)
+  | { type: "confirmResult"; id: number; choice: "save" | "discard" | "cancel" };
+
+export type FileEntry = { name: string; isDirectory: boolean };
+
+/** The host's answer to a `fs` request. `error` names why it failed. */
+export type FileResult = {
+  ok: boolean;
+  entries?: FileEntry[];
+  content?: string;
+  modified?: number;
+  readOnly?: boolean;
+  error?: string;
+};
 
 export type CodeEditorOptions = {
   wordWrap: boolean;
@@ -32,7 +47,10 @@ export type CodeEditorWebMessage =
   | { type: "save"; content: string; sequence: number }
   | { type: "openFile"; path: string; line: number; column: number }
   | { type: "lspStart"; server: string }
-  | { type: "lsp"; server: string; json: string };
+  | { type: "lsp"; server: string; json: string }
+  | { type: "fs"; id: number; op: "list" | "read" | "write"; path: string; content?: string; modified?: number }
+  | { type: "confirmClose"; id: number; name: string }
+  | { type: "projectDirty"; dirty: boolean };
 
 type NativeMessageHandler = { postMessage(message: CodeEditorWebMessage): void };
 

@@ -1,5 +1,6 @@
 import AppKit
 import Bonsplit
+import WheelhouseCodeEditor
 
 /// What a new editor tab starts with.
 enum NewEditorTabKind {
@@ -7,6 +8,8 @@ enum NewEditorTabKind {
     case untitled
     /// Files picked in an open panel.
     case chosenFiles
+    /// A folder picked in an open panel, shown as a project: file tree and editor in one tab.
+    case chosenFolder
 }
 
 @MainActor
@@ -23,12 +26,16 @@ enum NewEditorTabPanel {
         String(localized: "wheelhouse.newEditorTab.openFile", defaultValue: "Open File…")
     }
 
-    /// The chosen file paths; empty when the panel was cancelled.
-    static func chooseFiles(startDirectory: String?) -> [String] {
+    nonisolated static var openFolderTitle: String {
+        String(localized: "wheelhouse.newEditorTab.openFolder", defaultValue: "Open Folder…")
+    }
+
+    /// The chosen file paths, or the chosen folder; empty when the panel was cancelled.
+    static func choose(folder: Bool, startDirectory: String?) -> [String] {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = !folder
+        panel.canChooseDirectories = folder
+        panel.allowsMultipleSelection = !folder
         panel.title = title
         panel.prompt = String(localized: "wheelhouse.newEditorTab.panelPrompt", defaultValue: "Open")
         if let directoryURL = directoryURL(startDirectory) {
@@ -44,7 +51,9 @@ enum NewEditorTabPanel {
         case .untitled:
             return UntitledEditorFiles.create().map { [$0] } ?? []
         case .chosenFiles:
-            return chooseFiles(startDirectory: startDirectory)
+            return choose(folder: false, startDirectory: startDirectory)
+        case .chosenFolder:
+            return choose(folder: true, startDirectory: startDirectory)
         }
     }
 
@@ -54,6 +63,7 @@ enum NewEditorTabPanel {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(title: untitledTitle) { chosen = .untitled })
         menu.addItem(ClosureMenuItem(title: openFileTitle) { chosen = .chosenFiles })
+        menu.addItem(ClosureMenuItem(title: openFolderTitle) { chosen = .chosenFolder })
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         return chosen
     }
@@ -127,6 +137,18 @@ enum UntitledEditorFiles {
 extension FilePreviewPanel {
     var isUntitled: Bool {
         UntitledEditorFiles.contains(filePath)
+    }
+
+    /// Whether a folder opens as a project tab; it needs the web code editor.
+    static var showsFoldersAsProjects: Bool {
+        UserDefaults.standard.object(forKey: CodeEditorPreference.enabledKey) as? Bool
+            ?? CodeEditorPreference.enabledByDefault
+    }
+
+    /// A folder is shown as a project instead of as one file.
+    var isFolder: Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: filePath, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// Saving an untitled file: asks where, writes `content` there, and puts a
@@ -278,6 +300,9 @@ final class NewEditorTabContextMenuItem: NSObject {
         })
         submenu.addItem(ClosureMenuItem(title: NewEditorTabPanel.openFileTitle) { [weak self] in
             self?.replay(terminalItem, as: .chosenFiles)
+        })
+        submenu.addItem(ClosureMenuItem(title: NewEditorTabPanel.openFolderTitle) { [weak self] in
+            self?.replay(terminalItem, as: .chosenFolder)
         })
         item.submenu = submenu
         menu.insertItem(item, at: menu.index(of: browserItem) + 1)

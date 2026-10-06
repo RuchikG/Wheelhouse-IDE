@@ -27,15 +27,32 @@ reload when the file changes on disk, and session restore all work as before.
   selection) and ⌘/ (toggle line comment) go to the editor. Everywhere else they keep their cmux
   meaning, for example ⌘D splits the pane.
 - A new-editor-tab button (curly braces) sits next to the new-terminal and new-browser buttons at
-  the top right of every pane. It offers "New Untitled File" and "Open File…"; a file that is
-  already open is focused instead of opened twice. A tab's right-click menu has the same two
-  choices under "New Editor Tab to Right". The button is the built-in action
+  the top right of every pane. It offers "New Untitled File", "Open File…" and "Open Folder…"; a
+  file that is already open is focused instead of opened twice. A tab's right-click menu has the
+  same choices under "New Editor Tab to Right". The button is the built-in action
   `wheelhouse.newEditor`, so it can be placed or removed like any other tab bar button in
   `cmux.json`.
 - An untitled file asks where to save the first time you save it, and the tab then becomes that
   file. Its text is not kept if the app quits before that.
 - Follows the panel's light or dark colors and the existing `fileEditor.*` settings (word wrap,
   line numbers, indent guides, current-line highlight, tab width).
+
+#### Folder tabs
+
+"Open Folder…" opens a folder as one tab that works like a small editor window: the folder's file
+tree on the left, a strip of the files you have opened from it, and the editor.
+
+- Folders load when expanded. `.git` is hidden. The tree and the open file are refreshed when the
+  window regains focus, and with the ↻ button.
+- ⌘S saves the open file. A dot marks a file with unsaved edits, and the tab itself shows one
+  while any file has them. Closing such a file asks whether to save.
+- If something else (an agent, a terminal command) changed a file after it was opened here, saving
+  asks before overwriting. A file with no unsaved edits just picks up the change.
+- Go to definition and similar jumps open the target inside the same tab. Files outside the
+  folder, such as a dependency's source, open read-only.
+- The language server is rooted at the folder and shared by every file in the tab.
+
+From a script, `wheelhouse/cli rpc file.open '{"paths":["/path/to/folder"]}'` opens a folder tab.
 
 #### Language servers
 
@@ -58,6 +75,8 @@ logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
 
 Not there yet:
 
+- A folder tab does not remember its open files across a restart, and has no file search,
+  create, rename or delete yet.
 - If a language server exits, its features stay off in that tab until the tab is reopened.
 - Remote files are read-only, as in cmux.
 - Markdown source editing still uses the native editor.
@@ -214,10 +233,10 @@ nightly and RC icon sets are still cmux's.
 
 | Path | What |
 | --- | --- |
-| `Packages/macOS/WheelhouseCodeEditor` | Swift package: the web view host, a private URL scheme that serves the bundled editor, the bridge to the page, unit tests |
-| `Sources/Panels/FilePreviewCodeEditor.swift` | Adapter between the file panel and the editor |
-| `Sources/Panels/FilePreviewNewEditorTab.swift` | The new-editor-tab action: file chooser, opening the tabs, the right-click menu item |
-| `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page |
+| `Packages/macOS/WheelhouseCodeEditor` | Swift package: the web view host, a private URL scheme that serves the bundled editor, the bridge to the page, language server processes, file access for folder tabs, unit tests |
+| `Sources/Panels/FilePreviewCodeEditor.swift` | Adapters between the file panel and the editor, for a file and for a folder |
+| `Sources/Panels/FilePreviewNewEditorTab.swift` | The new-editor-tab action: untitled files, the file and folder choosers, the right-click menu item |
+| `webviews/src/code-editor`, `webviews/src/surfaces/codeEditorSurface.ts` | The editor page: single-file editor, folder view, language client |
 | `Resources/markdown-viewer/webviews-app` | Built web bundle (generated; do not edit) |
 | `wheelhouse/board` | The project board: sidebar script, the `proj` CLI (Go), examples |
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |

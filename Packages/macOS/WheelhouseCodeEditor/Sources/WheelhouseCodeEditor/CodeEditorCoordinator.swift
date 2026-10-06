@@ -11,6 +11,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     private var isReady = false
     private var sync = CodeEditorDocumentSync()
     private var document: CodeEditorDocument?
+    private var project: CodeEditorProject?
+    private var sentProject: CodeEditorProject?
     private var options: CodeEditorOptions?
     private var theme: CodeEditorTheme?
     private var sentOptions: CodeEditorOptions?
@@ -43,6 +45,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     var onSave: (@MainActor (String) -> Void)?
     var onPointerDown: (@MainActor () -> Void)?
     var onOpenFile: (@MainActor (String) -> Void)?
+    /// Whether any file open in a project has unsaved edits.
+    var onProjectDirtyChange: (@MainActor (Bool) -> Void)?
 
     /// Running language servers by file extension.
     private var languageServers: [String: LanguageServerProcess] = [:]
@@ -92,6 +96,13 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         flush()
     }
 
+    func update(project: CodeEditorProject, options: CodeEditorOptions, theme: CodeEditorTheme) {
+        self.project = project
+        self.options = options
+        self.theme = theme
+        flush()
+    }
+
     func close() {
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.messageHandlerName)
@@ -113,6 +124,14 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         if let options, options != sentOptions {
             sentOptions = options
             send(["type": "options", "options": Self.jsonObject(options)])
+        }
+        if let project, project != sentProject {
+            sentProject = project
+            send([
+                "type": "project",
+                "root": project.rootPath,
+                "name": (project.rootPath as NSString).lastPathComponent,
+            ])
         }
         if let document, let sequence = sync.outgoingSequence(for: document) {
             send([
@@ -167,8 +186,139 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         isReady = false
         sentOptions = nil
         sentTheme = nil
+        sentProject = nil
         sync.reset()
         stopLanguageServers()
+    }
+
+    // MARK: Project files
+
+    /// Answers a file request from the project page. File access runs off the
+    /// main thread; the reply carries the request's `id`.
+    private func handleFileRequest(_ body: [String: Any]) {
+        guard let project, let id = body["id"] as? Int, let operation = body["op"] as? String,
+              let path = body["path"] as? String, path.hasPrefix("/") else { return }
+        let files = ProjectFileSystem(root: project.rootPath)
+        let content = body["content"] as? String
+        let expectedModified = body["modified"] as? Double
+        let generation = pageGeneration
+        Task { [weak self] in
+            let reply = await Task.detached { () -> FileReply in
+                Self.perform(operation, path: path, content: content, expectedModified: expectedModified, in: files)
+            }.value
+            guard let self, self.pageGeneration == generation else { return }
+            if case .changedOnDisk = reply, let content {
+                self.resolveChangedOnDisk(id: id, path: path, content: content, files: files)
+            } else {
+                self.send(reply.message(id: id))
+            }
+        }
+    }
+
+    private enum FileReply: Sendable {
+        case entries([ProjectFileSystem.Entry])
+        case file(ProjectFileSystem.File)
+        case written(Double)
+        case changedOnDisk
+        case failed(String)
+
+        func message(id: Int) -> [String: Any] {
+            var message: [String: Any] = ["type": "fsResult", "id": id, "ok": true]
+            switch self {
+            case .entries(let entries):
+                message["entries"] = entries.map { ["name": $0.name, "isDirectory": $0.isDirectory] }
+            case .file(let file):
+                message["content"] = file.content
+                message["modified"] = file.modified
+                message["readOnly"] = file.isReadOnly
+            case .written(let modified):
+                message["modified"] = modified
+            case .changedOnDisk:
+                message["ok"] = false
+                message["error"] = "changedOnDisk"
+            case .failed(let reason):
+                message["ok"] = false
+                message["error"] = reason
+            }
+            return message
+        }
+    }
+
+    private nonisolated static func perform(
+        _ operation: String,
+        path: String,
+        content: String?,
+        expectedModified: Double?,
+        in files: ProjectFileSystem
+    ) -> FileReply {
+        do {
+            switch operation {
+            case "list":
+                return .entries(try files.list(path))
+            case "read":
+                return .file(try files.read(path))
+            case "write":
+                guard let content else { return .failed("unreadable") }
+                return .written(try files.write(content, to: path, expectedModified: expectedModified))
+            default:
+                return .failed("unsupported")
+            }
+        } catch ProjectFileSystem.Failure.changedOnDisk {
+            return .changedOnDisk
+        } catch ProjectFileSystem.Failure.notText {
+            return .failed("notText")
+        } catch ProjectFileSystem.Failure.tooLarge {
+            return .failed("tooLarge")
+        } catch ProjectFileSystem.Failure.outsideProject {
+            return .failed("outsideProject")
+        } catch {
+            return .failed("unreadable")
+        }
+    }
+
+    /// A save found the file changed by something else since it was read.
+    private func resolveChangedOnDisk(id: Int, path: String, content: String, files: ProjectFileSystem) {
+        let alert = NSAlert()
+        alert.messageText = String(
+            localized: "wheelhouse.project.changedOnDisk.title",
+            defaultValue: "“\((path as NSString).lastPathComponent)” changed on disk"
+        )
+        alert.informativeText = String(
+            localized: "wheelhouse.project.changedOnDisk.message",
+            defaultValue: "Something else modified this file after it was opened here. Saving replaces those changes."
+        )
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.changedOnDisk.cancel", defaultValue: "Cancel"))
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.changedOnDisk.overwrite", defaultValue: "Overwrite"))
+        guard alert.runModal() == .alertSecondButtonReturn else {
+            send(FileReply.changedOnDisk.message(id: id))
+            return
+        }
+        let reply = Self.perform("write", path: path, content: content, expectedModified: nil, in: files)
+        send(reply.message(id: id))
+    }
+
+    /// Asks what to do with unsaved edits in a file the page is about to close.
+    private func confirmClose(_ body: [String: Any]) {
+        guard let id = body["id"] as? Int, let name = body["name"] as? String else { return }
+        let alert = NSAlert()
+        alert.messageText = String(
+            localized: "wheelhouse.project.unsaved.title",
+            defaultValue: "Save changes to “\(name)”?"
+        )
+        alert.informativeText = String(
+            localized: "wheelhouse.project.unsaved.message",
+            defaultValue: "Your changes are lost if you don’t save them."
+        )
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.unsaved.save", defaultValue: "Save"))
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.unsaved.cancel", defaultValue: "Cancel"))
+        alert.addButton(withTitle: String(localized: "wheelhouse.project.unsaved.discard", defaultValue: "Don’t Save"))
+        let choice: String
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: choice = "save"
+        case .alertThirdButtonReturn: choice = "discard"
+        default: choice = "cancel"
+        }
+        send(["type": "confirmResult", "id": id, "choice": choice])
     }
 
     // MARK: Language servers
@@ -188,7 +338,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     /// Starts the server for files with extension `server`, as asked by the page.
     private func startLanguageServer(_ server: String) {
         guard languageServers[server] == nil, !startingLanguageServers.contains(server) else { return }
-        guard let path = document?.path,
+        guard let path = document?.path ?? project?.rootPath,
               let definition = LanguageServerRegistry.definition(
                   forFileExtension: server,
                   overrides: UserDefaults.standard.dictionary(forKey: LanguageServerRegistry.defaultsKey)
@@ -207,7 +357,9 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 self.sendLanguageServerState(server, "unavailable")
                 return
             }
-            let root = LanguageServerRegistry.rootDirectory(forFile: path, markers: definition.rootMarkers)
+            // A project's server is rooted at the project folder, a single file's at its module.
+            let root = self.project?.rootPath
+                ?? LanguageServerRegistry.rootDirectory(forFile: path, markers: definition.rootMarkers)
             var environment = ProcessInfo.processInfo.environment
             environment["PATH"] = searchPath
             let process = LanguageServerProcess(
@@ -304,6 +456,12 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                let message = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
                 forwardToLanguageServer(server, message)
             }
+        case "fs":
+            handleFileRequest(body)
+        case "confirmClose":
+            confirmClose(body)
+        case "projectDirty":
+            onProjectDirtyChange?(body["dirty"] as? Bool ?? false)
         case "openFile":
             guard let path = body["path"] as? String, path.hasPrefix("/") else { return }
             Self.reveal(path: path, line: body["line"] as? Int ?? 1, column: body["column"] as? Int ?? 1)
