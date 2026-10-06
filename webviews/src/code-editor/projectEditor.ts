@@ -89,11 +89,11 @@ export class ProjectEditor {
     this.editor = createMonacoEditor(this.editorHost);
     this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void this.saveActive());
     monaco.editor.registerEditorOpener({
-      openCodeEditor: (_source, resource, selectionOrPosition) => {
+      openCodeEditor: async (_source, resource, selectionOrPosition) => {
         if (resource.scheme !== "file") {
           return false;
         }
-        void this.openFile(resource.fsPath, startOf(selectionOrPosition));
+        await this.openFile(resource.fsPath, startOf(selectionOrPosition));
         return true;
       },
     });

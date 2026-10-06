@@ -63,6 +63,9 @@ runs `gopls -remote=auto`, a thin client of one shared gopls daemon, so open fil
 module share one loaded workspace. The project root is the nearest `go.work`, else `go.mod`, above
 the file. A jump to another file opens that file as a tab in the same pane.
 
+Not yet: a rename that would also change a file that is not open is refused as a whole, and the
+⌘-hover preview of a definition stays empty when its file is not open (the jump itself works).
+
 Other servers that speak LSP over standard input and output can be added, by file extension:
 
 ```sh
@@ -162,7 +165,7 @@ cmux builds whose relay reports agent status itself. See
 | Step | State |
 | --- | --- |
 | Editor in the file panel | Done |
-| LSP: completion, definitions, hover, diagnostics (gopls first) | Next |
+| LSP: completion, definitions, hover, diagnostics (gopls first) | Done |
 | Remote workspaces: edit and save files over SSH, language server on the remote host | Planned |
 | Project board: lanes, cards, project files, a worktree per project | Done |
 | Notifications from agents on SSH hosts | Done |

@@ -1,5 +1,6 @@
 import * as monaco from "monaco-editor";
 import { postToHost } from "./bridge";
+import { acceptUnopenedFiles, type DocumentBridge, type ServerRange } from "./unopenedFiles";
 
 type Transport = ConstructorParameters<typeof monaco.lsp.MonacoLspClient>[0];
 type Message = Parameters<Transport["send"]>[0];
@@ -122,6 +123,14 @@ class HostTransport implements Transport {
   }
 }
 
+/** Where an answer points when its file has no open document: the answer's own URI. */
+function locateUnopenedFile(uri: string, range: ServerRange) {
+  return {
+    textModel: { uri: monaco.Uri.parse(uri) },
+    range: new monaco.Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1),
+  };
+}
+
 /**
  * One language client per kind of file, named by file extension. The host
  * decides whether a server exists for that kind and runs it.
@@ -149,7 +158,11 @@ export class LanguageClients {
     if (state === "open" && !this.transports.has(server)) {
       const transport = new HostTransport(server);
       this.transports.set(server, transport);
-      new monaco.lsp.MonacoLspClient(transport);
+      const client = new monaco.lsp.MonacoLspClient(transport);
+      const bridge = (client as unknown as { _bridge?: DocumentBridge<ReturnType<typeof locateUnopenedFile>> })._bridge;
+      if (!acceptUnopenedFiles(bridge, locateUnopenedFile)) {
+        console.error("code editor: language client internals changed; jumps to unopened files will fail");
+      }
     } else if (state === "closed") {
       this.transports.get(server)?.close();
     }
