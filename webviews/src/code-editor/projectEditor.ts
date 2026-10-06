@@ -88,6 +88,7 @@ export class ProjectEditor {
   private isRestoring = false;
   /** A name is being typed into the tree, which must not be redrawn under it. */
   private isNaming = false;
+  private treeIsStale = false;
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly treeTitle = element("div", "project-tree-title");
@@ -208,6 +209,11 @@ export class ProjectEditor {
     const rows = new Map<string, HTMLElement>();
     const list = document.createDocumentFragment();
     await this.renderDirectory(this.root, 0, list, rows);
+    // Swapping the rows in now would take the name field being typed in with them.
+    if (this.isNaming) {
+      this.treeIsStale = true;
+      return;
+    }
     this.rows.clear();
     for (const [path, row] of rows) {
       this.rows.set(path, row);
@@ -333,6 +339,10 @@ export class ProjectEditor {
         this.isNaming = false;
         input.remove();
         resolve(name);
+        if (this.treeIsStale) {
+          this.treeIsStale = false;
+          void this.renderTree();
+        }
       };
       input.addEventListener("keydown", (event) => {
         event.stopPropagation();
