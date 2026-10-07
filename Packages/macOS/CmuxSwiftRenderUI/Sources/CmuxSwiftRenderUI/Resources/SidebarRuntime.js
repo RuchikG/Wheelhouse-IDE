@@ -475,6 +475,8 @@
   };
   g.openURL = (url) => __host_action(JSON.stringify({ kind: "openURL", url: String(url) }));
   g.log = (message) => __host_action(JSON.stringify({ kind: "log", message: String(message) }));
+  // Wheelhouse IDE: how a sidebar tells this app from cmux, and its New Project form.
+  g.wheelhouse = { newProject: () => g.cmux("wheelhouse.project.new", {}) };
 
   // ---------------------------------------------------------------------
   // Host entry points

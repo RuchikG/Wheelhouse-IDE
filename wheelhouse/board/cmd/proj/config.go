@@ -43,25 +43,26 @@ func configHome() (string, error) {
 	return filepath.Join(home, ".config", "wheelhouse"), nil
 }
 
-// ensureHome creates the projects directory on first use and leaves a template to copy.
-func ensureHome() error {
+// ensureHome creates the projects directory on first use, with a commented project file for
+// reference, and reports whether it did.
+func ensureHome() (bool, error) {
 	home, err := configHome()
 	if err != nil {
-		return err
+		return false, err
 	}
 	projects := filepath.Join(home, "projects")
 	if _, err := os.Stat(projects); err == nil {
-		return nil
+		return false, nil
 	}
 	if err := os.MkdirAll(projects, 0o755); err != nil {
-		return err
+		return false, err
 	}
 	template := filepath.Join(projects, "_example.yaml")
 	if err := os.WriteFile(template, []byte(boardfiles.ExampleProject), 0o644); err != nil {
-		return err
+		return false, err
 	}
 	fmt.Println("created", projects)
-	return nil
+	return true, nil
 }
 
 func loadConfig() (*config, error) {

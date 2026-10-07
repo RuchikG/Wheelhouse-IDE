@@ -55,13 +55,21 @@ Design:
   Nothing is re-implemented on the board.
 - **Workspaces that are not projects** are listed under "Not on the board" and can be added to a
   lane from there.
+- **Nothing to set up.** The first launch creates the lanes, shows the board and adds an example
+  project with a folder of its own, so there is a card to click before you have made one.
+- **Projects are added from the board.** The + at the top opens a short form: a name and a
+  folder, and optionally the lane, a summary and a command for the first terminal. A project
+  whose workspace was closed stays listed under Closed and opens again with a click.
 - **A project is one small file:** name, lane, summary, repositories with their branch, links
-  for the card, and agents to start. Opening a project creates its workspace in the right lane,
-  starts the agents, and gives it its own git worktree per repository, so two projects on the
-  same repository never share a checkout.
+  for the card, and agents to start. The form writes it; edit it by hand for the rest. Opening
+  a project creates its workspace in the right lane, starts the agents, and gives it its own git
+  worktree per repository, so two projects on the same repository never share a checkout.
+- **Readable in light and dark.** The board has a palette for each appearance and follows the
+  app's theme.
 - **Remote projects** are ordinary cmux SSH workspaces; the card carries a badge.
 
 The board is built on cmux's own extension points (custom sidebars, workspace groups and the
-CLI), so it needs no changes to the app and also works with stock cmux. The sidebar script and
-`proj`, the small CLI that creates lanes and opens projects, are in
-[`wheelhouse/board`](../board/README.md), with set-up steps.
+CLI), so it also works with stock cmux. Wheelhouse IDE adds three things around it: the first
+launch runs the set-up, the New Project form, and sidebar colours given per appearance. The
+sidebar script and `proj`, the small CLI behind all of it, are in
+[`wheelhouse/board`](../board/README.md).

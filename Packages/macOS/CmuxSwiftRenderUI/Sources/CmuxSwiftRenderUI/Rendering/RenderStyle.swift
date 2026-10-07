@@ -5,8 +5,19 @@ import SwiftUI
 ///
 /// Accepts `#RRGGBB`, `#RRGGBBAA`, a few named tokens, and `accent`. Returns
 /// `nil` for unknown tokens so callers fall back to the default.
+///
+/// Wheelhouse IDE: `light|dark` (two tokens) is the first in a light appearance
+/// and the second in a dark one.
 func dslColor(_ token: String?) -> Color? {
     guard let token, !token.isEmpty else { return nil }
+    if let bar = token.firstIndex(of: "|") {
+        guard let light = dslColor(String(token[..<bar])),
+              let dark = dslColor(String(token[token.index(after: bar)...])) else { return nil }
+        let lightColor = NSColor(light), darkColor = NSColor(dark)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? darkColor : lightColor
+        })
+    }
     switch token.lowercased() {
     case "accent", "accentcolor": return .accentColor
     case "primary": return .primary

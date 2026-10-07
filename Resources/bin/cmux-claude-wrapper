@@ -450,6 +450,16 @@ find_real_claude() {
         cmux_claude_wrapper_is_self_or_shim "$candidate" && continue
         [[ -x "$candidate" ]] && printf '%s' "$candidate" && return 0
     done
+    # Wheelhouse IDE: Claude Code's own install locations, for a `claude` that the user's
+    # shell reaches without a PATH entry (the local install is an alias).
+    local known
+    for known in "${HOME:-}/.claude/local/claude" "${HOME:-}/.local/bin/claude" \
+        /opt/homebrew/bin/claude /usr/local/bin/claude; do
+        [[ -f "$known" && -x "$known" ]] || continue
+        cmux_claude_wrapper_is_self_or_shim "$known" && continue
+        printf '%s' "$known"
+        return 0
+    done
     return 1
 }
 

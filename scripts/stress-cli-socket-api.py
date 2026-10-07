@@ -201,6 +201,7 @@ SKIPPED_SOCKET_METHODS = {
     "vm.attach_info": "requires a real VM id",
     "vm.ssh_info": "requires a real VM id",
     "settings.open": "opens UI only, covered through CLI help",
+    "wheelhouse.project.new": "opens UI only",
     "feedback.open": "opens UI only",
     "feedback.submit": "can send external feedback",
     "browser.import.dialog": "opens an interactive import UI",

@@ -10,8 +10,8 @@ func TestEnsureHomeCreatesProjectsWithATemplateOnce(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "wheelhouse")
 	t.Setenv("WHEELHOUSE_HOME", home)
 
-	if err := ensureHome(); err != nil {
-		t.Fatal(err)
+	if created, err := ensureHome(); err != nil || !created {
+		t.Fatalf("first run: created=%v err=%v", created, err)
 	}
 	template := filepath.Join(home, "projects", "_example.yaml")
 	if _, err := os.Stat(template); err != nil {
@@ -28,8 +28,8 @@ func TestEnsureHomeCreatesProjectsWithATemplateOnce(t *testing.T) {
 	if err := os.Remove(template); err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureHome(); err != nil {
-		t.Fatal(err)
+	if created, err := ensureHome(); err != nil || created {
+		t.Fatalf("second run: created=%v err=%v", created, err)
 	}
 	if _, err := os.Stat(template); err == nil {
 		t.Fatal("an existing projects directory was given the template again")

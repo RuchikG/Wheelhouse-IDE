@@ -45,3 +45,15 @@ its own settings, runs next to an installed cmux, and never updates itself from 
 feed. The board command `proj` is inside it. It is signed for local use only, without an Apple
 Developer ID, so a downloaded copy has to be approved once: open it, then choose "Open Anyway"
 under System Settings → Privacy & Security.
+
+To publish that build as a GitHub release of your fork:
+
+```sh
+wheelhouse/publish.sh 0.1.0 --check    # run the checks, change nothing
+wheelhouse/publish.sh 0.1.0            # or --draft to look at it first; --notes <file> for the text
+```
+
+It only takes an archive built from the commit that is checked out, with that commit on
+`origin/main` and no release of that version yet. The release is created as a draft, gets the
+archive and its checksum, and becomes public last; then the archive is downloaded back and its
+checksum compared. The GitHub token is the one git already uses for the repository.

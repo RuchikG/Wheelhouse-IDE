@@ -51,6 +51,17 @@ func cmuxJSON(v any, args ...string) error {
 	return nil
 }
 
+var appMethods *string
+
+// appHas reports whether the app behind the cmux CLI answers a socket method.
+func appHas(method string) bool {
+	if appMethods == nil {
+		out, _ := cmux("capabilities")
+		appMethods = &out
+	}
+	return strings.Contains(*appMethods, `"`+method+`"`)
+}
+
 type workspace struct {
 	ID          string `json:"id"`
 	Ref         string `json:"ref"`
@@ -76,6 +87,7 @@ type group struct {
 	ExternalID string   `json:"external_id"`
 	AnchorRef  string   `json:"anchor_workspace_ref"`
 	MemberRefs []string `json:"member_workspace_refs"`
+	Pinned     bool     `json:"is_pinned"`
 }
 
 func listGroups() ([]group, error) {
@@ -90,8 +102,9 @@ func listGroups() ([]group, error) {
 
 func laneExternalID(key string) string { return "ide-lane-" + key }
 
-// ensureLanes creates the missing lane groups. Each group is owned by an anchor workspace
-// that cmux generates, which is what lets a lane exist while it has no projects.
+// ensureLanes creates the missing lane groups and pins every lane. Each group is owned by an
+// anchor workspace that cmux generates, which is what lets a lane exist while it has no
+// projects; cmux removes such a group when its last project leaves unless the group is pinned.
 func ensureLanes() (map[string]group, error) {
 	existing, err := listGroups()
 	if err != nil {
@@ -118,6 +131,18 @@ func ensureLanes() (map[string]group, error) {
 			return nil, err
 		}
 		byKey[l.Key] = resp.Group
+		created = true
+	}
+	for _, l := range lanes {
+		g := byKey[l.Key]
+		if g.Pinned {
+			continue
+		}
+		if _, err := cmux("workspace-group", "pin", g.Ref); err != nil {
+			return nil, err
+		}
+		g.Pinned = true
+		byKey[l.Key] = g
 		created = true
 	}
 	if created {

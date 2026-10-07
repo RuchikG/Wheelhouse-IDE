@@ -2115,7 +2115,9 @@ fi
 if [[ -n "$TAG" && "$BUILD_ONLY" -ne 1 ]]; then
   /usr/bin/osascript -e "tell application id \"${BUNDLE_ID}\" to quit" >/dev/null 2>&1 || true
   sleep 0.3
-  TAG_PROCESS_PATTERN="${APP_NAME}.app/Contents/MacOS/${BASE_APP_NAME}"
+  # Wheelhouse IDE: every tag builds an app of the same name, so the tag's own build
+  # folder is part of the pattern; without it one tag's build quits another tag's app.
+  TAG_PROCESS_PATTERN="${DERIVED_DATA}/Build/Products/Debug/${APP_NAME}.app/Contents/MacOS/${BASE_APP_NAME}"
   pkill -f "$TAG_PROCESS_PATTERN" || true
   for _ in {1..20}; do
     if ! pgrep -f "$TAG_PROCESS_PATTERN" >/dev/null 2>&1; then

@@ -13,8 +13,11 @@ import (
 
 const usage = `proj - project workspaces on cmux
 
-  proj init                  create the lane groups, the browser profile and install the board sidebar;
-                             the first time, also create <home>/projects with a template
+  proj init                  create the lanes, install the board and show it as the sidebar;
+                             the first time, also add an example project
+  proj new <name> [--dir <folder>] [--lane <lane>] [--summary <text>] [--agent <command>] [--no-open]
+                             add a project and open it; with no arguments, show the app's form
+  proj example               add the example project, or open it when it is there
   proj sync                  write the projects' links into the installed board again
   proj ls                    list projects with their lane, workspace and checkouts
   proj open <project> [--focus]
@@ -55,8 +58,10 @@ func main() {
 }
 
 func run(cmd string, args []string) error {
-	if cmd == "init" {
-		if err := ensureHome(); err != nil {
+	firstRun := false
+	if cmd == "init" || cmd == "new" || cmd == "example" {
+		var err error
+		if firstRun, err = ensureHome(); err != nil {
 			return err
 		}
 	}
@@ -70,7 +75,11 @@ func run(cmd string, args []string) error {
 	}
 	switch cmd {
 	case "init":
-		return cmdInit(cfg, all)
+		return cmdInit(cfg, all, firstRun)
+	case "new":
+		return cmdNew(cfg, all, args)
+	case "example":
+		return cmdExample(cfg, all)
 	case "sync":
 		return cmdSync(cfg, all)
 	case "ls":
@@ -91,7 +100,7 @@ func run(cmd string, args []string) error {
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 }
 
-func cmdInit(cfg *config, all []*Manifest) error {
+func cmdInit(cfg *config, all []*Manifest, firstRun bool) error {
 	if _, err := ensureLanes(); err != nil {
 		return err
 	}
@@ -104,10 +113,20 @@ func cmdInit(cfg *config, all []*Manifest) error {
 		return err
 	}
 	fmt.Println("board installed:", dst)
-	fmt.Println("show it with the sidebar button's right-click menu, or: cmux sidebar open projects-board")
-	if len(all) == 0 {
-		example := filepath.Join(cfg.home, "projects", "_example.yaml")
-		fmt.Printf("no projects yet: copy %s to <name>.yaml next to it, edit it, then run: proj open <name>\n", example)
+	if _, err := cmux("sidebar", "select", boardName); err != nil {
+		fmt.Printf("warn  the board is not showing yet (%v); pick %s from the sidebar button's right-click menu\n", err, boardName)
+	} else {
+		fmt.Println("board showing as the sidebar")
+	}
+	if firstRun && len(all) == 0 {
+		if err := cmdExample(cfg, all); err != nil {
+			return err
+		}
+	}
+	if appHas(newProjectMethod) {
+		fmt.Println("add a project with the + at the top of the board, or: proj new <name> --dir <folder>")
+	} else {
+		fmt.Println("add a project with: proj new <name> --dir <folder>")
 	}
 	return nil
 }

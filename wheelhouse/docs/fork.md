@@ -84,7 +84,8 @@ nightly and RC icon sets are still cmux's.
 | `wheelhouse/remote-notify` | Claude Code hook for SSH hosts and its installer |
 | `wheelhouse/build.sh`, `open.sh`, `cli` | Build, open and drive Wheelhouse IDE |
 | `Sources/WheelhouseDefaults.swift` | Preferences the app starts with on top of cmux's defaults |
-| `wheelhouse/release.sh` | Builds the app that is handed to other people |
+| `Sources/WheelhouseProjects.swift` | The board from inside the app: the first-launch set-up and the New Project form, both run the bundled `proj` |
+| `wheelhouse/release.sh`, `publish.sh` | Build the app that is handed to other people, and publish it as a GitHub release |
 | `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE, and the icon source |
 
 After changing anything under `webviews/`, regenerate the bundle:
@@ -108,7 +109,16 @@ key monitor, the built-in tab bar actions), for the one-line telemetry rule in
 `Sources/FeatureFlags.swift`, for one line in `Sources/CmuxMain.swift` that registers the
 fork's preferences, for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift` that
 makes agent hooks on SSH hosts opt-in, and for the two checks (`Sources/cmuxApp.swift`,
-`Sources/TerminalSurfaceRuntimeWiring.swift`) that keep Computer Use off until asked for. The tab right-click menu is built by the Bonsplit submodule, which
+`Sources/TerminalSurfaceRuntimeWiring.swift`) that keep Computer Use off until asked for. The
+project board adds: one line in `AppDelegate.applicationDidFinishLaunching` (the first-launch
+set-up), the `wheelhouse.project.new` socket method (`Sources/TerminalController.swift` and its
+capabilities list), the File > New Project… item and the form's window id in
+`Sources/cmuxApp.swift`, and two additions to the custom-sidebar package
+(`Packages/macOS/CmuxSwiftRenderUI`): a `wheelhouse` global in `SidebarRuntime.js`, by which a
+sidebar knows it runs in this app, and `light|dark` colour pairs in `RenderStyle.swift`. Two
+additions keep `claude` working in the app's terminals when it is installed as a shell alias
+or outside the `PATH` (`Resources/shell-integration/cmux-zsh-integration.zsh`,
+`Resources/bin/cmux-claude-wrapper`). The tab right-click menu is built by the Bonsplit submodule, which
 this fork does not modify: the editor item is added to that menu when it opens. `upstream` is
 `manaflow-ai/cmux`; merge it regularly. `README.md`, the generated web bundle and the icon images are the
 files most likely to conflict; keep the fork's README, regenerate the bundle after a merge, and rerun

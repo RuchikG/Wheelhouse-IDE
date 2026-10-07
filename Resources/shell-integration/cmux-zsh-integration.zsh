@@ -585,6 +585,16 @@ _cmux_install_cli_wrapper() {
     if [[ "$command_name" == "claude" ]]; then
         _cmux_install_cli_command_shim "$command_name" "$wrapper_path"
     fi
+    # Wheelhouse IDE: a `claude` that is an alias for one program (Claude Code's local
+    # install) stays reachable after the alias is removed below.
+    if [[ "$command_name" == "claude" && -z "${CMUX_CUSTOM_CLAUDE_PATH:-}" ]]; then
+        local aliased="${aliases[claude]:-}"
+        aliased="${(Q)aliased}"
+        aliased="${aliased/#\~\//$HOME/}"
+        if [[ "$aliased" == /* && -f "$aliased" && -x "$aliased" ]]; then
+            export CMUX_CUSTOM_CLAUDE_PATH="$aliased"
+        fi
+    fi
     builtin unalias "$command_name" >/dev/null 2>&1 || true
     if [[ "$command_name" == "claude" ]]; then
         eval "$command_name() { _cmux_claude_wrapper_command \"\$@\"; }"

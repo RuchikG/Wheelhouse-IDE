@@ -936,6 +936,10 @@ struct cmuxApp: App {
                     }
                 }
 
+                Button(String(localized: "wheelhouse.newProject.menu", defaultValue: "New Project…")) {
+                    WheelhouseProjects.showNewProject()
+                }
+
                 splitCommandButton(title: String(localized: "menu.file.newWorkspaceGroup", defaultValue: "New Workspace Group"), shortcut: menuShortcut(for: .newWorkspaceGroup)) {
                     _ = AppDelegate.shared?.createEmptyWorkspaceGroup(
                         tabManager: activeTabManager,
@@ -1759,6 +1763,7 @@ private let cmuxAuxiliaryWindowIdentifiers: Set<String> = [
     "cmux.cloudPaneCreationFailure.card",
     "cmux.cloudCreateTeam",
     "cmux.sudo.approval",
+    "cmux.wheelhouse.newProject",
 ]
 
 /// Returns whether the given window should handle the standard close shortcut

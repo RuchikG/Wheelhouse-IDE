@@ -278,6 +278,7 @@ extension TerminalController {
             "session.import",
             "session.export",
             "settings.open",
+            "wheelhouse.project.new",
             "feedback.open",
             "feedback.submit",
             "feed.push",

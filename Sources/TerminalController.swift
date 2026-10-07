@@ -404,7 +404,8 @@ class TerminalController {
         "debug.notification.focus",
         "debug.app.activate", "debug.cloudtree.spacing",
         "debug.right_sidebar.focus",
-        "feed.jump"
+        "feed.jump",
+        "wheelhouse.project.new"
     ]
 
     nonisolated static func commandHasFocusIntent(
@@ -3121,6 +3122,9 @@ class TerminalController {
         // workspace.remote.pty_* methods stay on the app-side worker path.
         case "workspace.cloud_vm_open":
             return v2Result(id: id, self.v2WorkspaceCloudVMOpen(params: params))
+        case "wheelhouse.project.new":
+            WheelhouseProjects.showNewProject()
+            return v2Ok(id: id, result: ["window": WheelhouseNewProjectWindowController.windowIdentifier])
         case "workspace.cloud_vm_terminal_ready":
             return v2Result(id: id, self.v2WorkspaceCloudVMTerminalReady(params: params))
         case "workspace.cloud_vm_bind":

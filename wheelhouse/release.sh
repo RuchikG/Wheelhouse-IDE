@@ -20,6 +20,9 @@ dist="$WHEELHOUSE_ROOT/wheelhouse/dist"
 app="$dist/$WHEELHOUSE_APP_NAME.app"
 
 cd "$WHEELHOUSE_ROOT"
+# Recorded next to the archive: publish.sh only takes a build of a committed tree.
+commit=$(git rev-parse HEAD)
+[ -z "$(git status --porcelain)" ] || commit="$commit-dirty"
 # The Release configuration asks for cmux's developer certificate; build unsigned, sign below.
 xcodebuild -project cmux.xcodeproj -scheme cmux -configuration Release \
   -destination 'platform=macOS' -derivedDataPath "$derived" CODE_SIGNING_ALLOWED=NO build
@@ -31,7 +34,7 @@ case "$(lipo -archs "$built/Contents/MacOS/cmux")" in
   *) arch=$(lipo -archs "$built/Contents/MacOS/cmux" | tr -d ' ') ;;
 esac
 archive="$dist/Wheelhouse-IDE-$version-macos-$arch.zip"
-rm -rf "$app" "$archive" "$archive.sha256"
+rm -rf "$app" "$archive" "$archive.sha256" "$archive.commit"
 mkdir -p "$dist"
 cp -R "$built" "$app"
 
@@ -51,7 +54,7 @@ set_plist LSEnvironment:CMUX_BUNDLE_ID "$bundle_id"
 set_plist LSEnvironment:CMUX_SOCKET_PATH /tmp/cmux-staging-wheelhouse.sock
 
 python3 "$WHEELHOUSE_ROOT/wheelhouse/brand/apply.py" "$app"
-wheelhouse_bundle_board "$app"
+wheelhouse_bundle_board "$app" "$arch"
 
 # Source paths compiled into the binaries name the builder's home folder. They mean nothing
 # on another Mac, so the folder's name is overwritten with one of the same length.
@@ -95,5 +98,6 @@ fi
 
 /usr/bin/ditto -c -k --keepParent --sequesterRsrc "$app" "$archive"
 (cd "$dist" && shasum -a 256 "$(basename "$archive")" > "$(basename "$archive").sha256")
+printf '%s\n' "$commit" > "$archive.commit"
 echo "Wheelhouse IDE $version: $archive ($(du -h "$archive" | cut -f1))"
 cat "$archive.sha256"

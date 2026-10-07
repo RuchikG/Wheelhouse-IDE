@@ -5,34 +5,34 @@ and opens projects. Both use only cmux's own extension points (custom sidebars, 
 the CLI), so they work with this fork and with stock cmux.
 
 - `sidebars/projects-board.js`: the board. Lanes are workspace groups; a card is a workspace.
-- `cmd/proj`: creates the lane groups, opens a project as a workspace in its lane with its
-  worktrees and agents, writes the projects' links into the board, and keeps lanes and project
-  files in sync.
+- `cmd/proj`: creates the lane groups, adds projects, opens a project as a workspace in its lane
+  with its worktrees and agents, writes the projects' links into the board, and keeps lanes and
+  project files in sync.
 - `skills/project-links`: a Claude Code skill that lets an agent keep a project's links.
-- `examples/`: a project file and a settings file to copy.
+- `examples/`: a project file with every setting, a settings file, and the example project's
+  read-me.
 
 The design is described in [Project board](../docs/board.md).
 
 ## Set up
 
-In Wheelhouse IDE, `proj` is part of the app: open a terminal in it and run
+**In Wheelhouse IDE there is nothing to set up.** The first time the app opens it creates the
+lanes, shows the board as the sidebar and adds an example project to look around in. `proj` is
+part of the app and on the `PATH` of its terminals.
+
+That first launch is `proj init`, which you can also run yourself at any time; it only adds what
+is missing:
 
 ```sh
-proj init                         # lanes, the board sidebar, and ~/.config/wheelhouse/projects
+proj init        # the lanes, the board as the sidebar and, the first time, the example project
 ```
 
-The first run creates `~/.config/wheelhouse/projects` with a commented template,
-`_example.yaml`. Copy it to `my-project.yaml` next to it, edit it, then:
-
-```sh
-proj open my-project
-```
-
+It keeps your projects in `~/.config/wheelhouse/projects` and the example's folder next to it.
 Settings are optional; copy [`examples/config.yaml`](examples/config.yaml) to
 `~/.config/wheelhouse/config.yaml` to change them.
 
 To use the board with stock cmux, or to work on `proj` itself, build it from this folder
-(Go 1.24 or later):
+(Go 1.24 or later) and run `proj init` once:
 
 ```sh
 cd wheelhouse/board
@@ -40,8 +40,22 @@ make install                      # builds bin/proj and links it into ~/.local/b
 make install-skill                # optional: links the project-links skill into ~/.claude/skills
 ```
 
-`proj init` writes the board to `~/.config/cmux/sidebars`. Pick `projects-board` from the sidebar
-button's right-click menu, or run `cmux sidebar select projects-board`.
+`proj init` writes the board to `~/.config/cmux/sidebars` and selects it. To switch back and
+forth, use the sidebar button's right-click menu.
+
+## Adding a project
+
+- **In Wheelhouse IDE:** click the **+** at the top of the board, or choose File > New Project….
+  Give the project a name and pick its folder; the lane, a one-line summary and a command for its
+  first terminal (an agent, for example) are optional. The project opens in its lane.
+- **From a terminal:** `proj new "Checkout redesign" --dir ~/code/checkout`, with `--lane`,
+  `--summary` and `--agent <command>` for the rest. This also works with stock cmux.
+
+Either way the project is one small file in `~/.config/wheelhouse/projects`, which you can edit
+for the settings the form does not ask about (see [Projects](#projects)).
+
+A project whose workspace you closed is listed under **Closed** at the bottom of the board in
+Wheelhouse IDE; click it to open it again. From a terminal that is `proj open <project>`.
 
 The installed board is a copy of `sidebars/projects-board.js` with each project's links written
 into it, because a custom sidebar cannot read files. `proj open`, `proj adopt` and `proj link`
@@ -59,7 +73,11 @@ CMUX_BIN=$PWD/../cli proj init
 ## Commands
 
 ```
-proj init                  create the lane groups and install the board sidebar
+proj init                  create the lanes, install the board and show it as the sidebar;
+                           the first time, also add the example project
+proj new <name> [--dir <folder>] [--lane <lane>] [--summary <text>] [--agent <command>]
+                           add a project and open it
+proj example               add the example project, or open it when it is there
 proj sync                  write the projects' links into the installed board again
 proj open <project>        create the project's worktrees and workspace (no-op when already open)
 proj adopt <project>       turn the workspace you are in into the project's workspace
@@ -79,8 +97,10 @@ proj check                 validate the project files
 ## Projects
 
 A project is one YAML file in `<home>/projects/`, where `<home>` is `~/.config/wheelhouse` or
-`$WHEELHOUSE_HOME`. See [`examples/project.yaml`](examples/project.yaml). The file name is the
-project's id on the command line; files starting with `_` are ignored.
+`$WHEELHOUSE_HOME`. The New Project form and `proj new` write it for you; every setting is shown
+in [`examples/project.yaml`](examples/project.yaml), which `proj init` also leaves in that folder
+as `_example.yaml`. The file name is the project's id on the command line; files starting with
+`_` are ignored.
 
 | Key | Meaning |
 | --- | --- |
@@ -166,10 +186,24 @@ is chosen from the title: a ticket for words such as "ticket", "issue" or "bug",
 "pipeline", "build", "release" or "review", a document for "doc", "design", "PRD" or "spec", and a
 link otherwise.
 
+## Wheelhouse IDE and stock cmux
+
+The board is one script for both. Wheelhouse IDE tells its sidebars that it is Wheelhouse IDE,
+and there the board also shows what needs the app: the **+** and the "No projects open" card
+(the New Project form), the **Closed** list, and a palette for each appearance (the board's
+colours are given as a light and a dark one, which only Wheelhouse IDE's sidebars understand).
+In stock cmux the board keeps one palette and projects are added with `proj new`.
+
 ## Notes
 
 - A cmux workspace group is owned by an anchor workspace, so each lane carries one generated
   workspace named after the lane. The board hides it.
+- cmux removes such a group when its last other workspace leaves, unless the group is pinned,
+  so `proj` pins the lanes: an emptied lane stays. Any `proj` command that needs the lanes puts
+  back a missing one and pins one that is not; in Wheelhouse IDE a missing lane on the board
+  says so and one click restores them.
+- Moving a card on the board moves its workspace. In Wheelhouse IDE the project file is updated
+  too; with stock cmux run `proj lane pull` to copy lane moves back into the project files.
 - Custom sidebars cannot reach the network or the filesystem, so the board shows only what cmux
   already knows about a workspace. Status from outside tools has to be pushed in through the cmux
   CLI (a workspace's description and progress).
