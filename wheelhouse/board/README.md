@@ -141,9 +141,10 @@ To add, change or remove a link:
 `proj link` edits the project file in place and keeps its comments and layout. It needs `links:`
 written as a list with one entry per line.
 
-A custom sidebar cannot write files, so the board saves a link by running `proj link` in a
-workspace of its own named "Saving link". It closes by itself after about a second; if the link
-could not be changed it stays open with the reason.
+A custom sidebar cannot write files, so the board saves a link by running `proj link`. Wheelhouse
+IDE runs it out of sight and shows an alert with the reason if the link could not be changed. In
+cmux the command runs in a workspace of its own named "Saving link", which closes by itself after
+about a second and stays open with the reason on a failure.
 
 Chips and the Links menu need a cmux whose custom sidebars support `fixedSize` and `cursor`
 (Wheelhouse IDE does). On an older cmux the board shows neither, and the links are not opened for

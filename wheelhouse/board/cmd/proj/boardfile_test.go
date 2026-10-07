@@ -30,6 +30,9 @@ func TestBoardDataListsLinksByKind(t *testing.T) {
 	if !strings.HasPrefix(data.Proj, "WHEELHOUSE_HOME='/home/me/wheelhouse' '") {
 		t.Errorf("proj command = %q", data.Proj)
 	}
+	if data.Home != "/home/me/wheelhouse" {
+		t.Errorf("home = %q", data.Home)
+	}
 	wantKinds := []boardKind{{"PRD", "doc.text"}, {"Tech Design", "doc.text"}, {"Tracker", "ticket"}}
 	if !slices.Equal(data.Kinds, wantKinds) {
 		t.Errorf("kinds = %+v, want %+v", data.Kinds, wantKinds)
@@ -70,6 +73,7 @@ func TestRenderBoardReplacesTheDataLine(t *testing.T) {
 		Kinds:          []boardKind{{Title: "Doc", Icon: "doc.text"}},
 		BrowserProfile: "work",
 		Proj:           "'/bin/proj'",
+		Home:           "/h",
 	}
 
 	out, err := renderBoard(source, "/src/projects-board.js", data)
@@ -81,7 +85,7 @@ func TestRenderBoardReplacesTheDataLine(t *testing.T) {
 	if !strings.HasPrefix(lines[0], boardGenerated+"/src/projects-board.js") {
 		t.Errorf("first line = %q", lines[0])
 	}
-	want := `const BOARD = {"projects":{"A \u003c/script\u003e \"B\"":{"slug":"a","links":[{"title":"Doc","url":"https://example.com/?a=1\u0026b=2"}]}},"kinds":[{"title":"Doc","icon":"doc.text"}],"browserProfile":"work","proj":"'/bin/proj'"};`
+	want := `const BOARD = {"projects":{"A \u003c/script\u003e \"B\"":{"slug":"a","links":[{"title":"Doc","url":"https://example.com/?a=1\u0026b=2"}]}},"kinds":[{"title":"Doc","icon":"doc.text"}],"browserProfile":"work","proj":"'/bin/proj'","home":"/h"};`
 	if lines[2] != want {
 		t.Errorf("data line =\n%s\nwant\n%s", lines[2], want)
 	}

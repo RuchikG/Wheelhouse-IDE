@@ -44,8 +44,9 @@ enum WheelhouseProjects {
         TerminalController.shared.activeSocketPath(preferredPath: SocketControlSettings.socketPath())
     }
 
-    /// Runs `proj` against this app and waits for it off the main thread.
-    static func run(_ arguments: [String]) async -> Outcome {
+    /// Runs `proj` against this app and waits for it off the main thread. `home` is the
+    /// directory of the project files when it is not the default one.
+    static func run(_ arguments: [String], home: String? = nil) async -> Outcome {
         guard let commandURL,
               let cliURL = Bundle.main.resourceURL?.appendingPathComponent("bin/cmux") else {
             return Outcome(succeeded: false, output: String(
@@ -57,6 +58,9 @@ enum WheelhouseProjects {
         environment["CMUX_SOCKET_PATH"] = socketPath
         environment["CMUX_BUNDLED_CLI_PATH"] = cliURL.path
         environment["CMUX_BIN"] = cliURL.path
+        if let home, !home.isEmpty {
+            environment["WHEELHOUSE_HOME"] = home
+        }
         // The app may itself have been started from a terminal of another cmux.
         for key in ["CMUX_SOCKET", "CMUX_WORKSPACE_ID", "CMUX_SURFACE_ID", "CMUX_TAB_ID", "CMUX_PANEL_ID"] {
             environment.removeValue(forKey: key)
@@ -106,6 +110,37 @@ enum WheelhouseProjects {
                 UserDefaults.standard.set(true, forKey: boardSetUpKey)
             } else {
                 NSLog("Wheelhouse IDE: the board was not set up: %@", outcome.output)
+            }
+        }
+    }
+
+    @MainActor private static var boardRun: Task<Void, Never>?
+
+    /// A change made on the board (a link, a lane, a project opened again): `proj` runs out
+    /// of sight, one change after another, and a failure is shown with what it said.
+    @MainActor
+    static func runForBoard(_ arguments: [String], home: String?, failure: String?) {
+        let previous = boardRun
+        boardRun = Task { @MainActor in
+            await previous?.value
+            let outcome = await run(arguments, home: home)
+            guard !outcome.succeeded else { return }
+            NSLog("Wheelhouse IDE: proj %@ failed: %@", arguments.joined(separator: " "), outcome.output)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            if let failure, !failure.isEmpty {
+                alert.messageText = failure
+            } else {
+                alert.messageText = String(
+                    localized: "wheelhouse.projects.changeFailed",
+                    defaultValue: "The board could not make that change."
+                )
+            }
+            alert.informativeText = outcome.message
+            if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+                alert.beginSheetModal(for: window) { _ in }
+            } else {
+                alert.runModal()
             }
         }
     }

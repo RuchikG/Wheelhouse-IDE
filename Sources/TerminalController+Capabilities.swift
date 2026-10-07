@@ -279,6 +279,7 @@ extension TerminalController {
             "session.export",
             "settings.open",
             "wheelhouse.project.new",
+            "wheelhouse.proj.run",
             "feedback.open",
             "feedback.submit",
             "feed.push",

@@ -111,11 +111,11 @@ fork's preferences, for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinat
 makes agent hooks on SSH hosts opt-in, and for the two checks (`Sources/cmuxApp.swift`,
 `Sources/TerminalSurfaceRuntimeWiring.swift`) that keep Computer Use off until asked for. The
 project board adds: one line in `AppDelegate.applicationDidFinishLaunching` (the first-launch
-set-up), the `wheelhouse.project.new` socket method (`Sources/TerminalController.swift` and its
-capabilities list), the File > New Project… item and the form's window id in
+set-up), the `wheelhouse.project.new` and `wheelhouse.proj.run` socket methods
+(`Sources/TerminalController.swift` and its capabilities list), the File > New Project… item and the form's window id in
 `Sources/cmuxApp.swift`, and two additions to the custom-sidebar package
 (`Packages/macOS/CmuxSwiftRenderUI`): a `wheelhouse` global in `SidebarRuntime.js`, by which a
-sidebar knows it runs in this app, and `light|dark` colour pairs in `RenderStyle.swift`. Two
+sidebar knows it runs in this app and has it run `proj`, and `light|dark` colour pairs in `RenderStyle.swift`. Two
 additions keep `claude` working in the app's terminals when it is installed as a shell alias
 or outside the `PATH` (`Resources/shell-integration/cmux-zsh-integration.zsh`,
 `Resources/bin/cmux-claude-wrapper`). The tab right-click menu is built by the Bonsplit submodule, which

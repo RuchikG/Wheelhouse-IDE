@@ -31,7 +31,7 @@ const CHIP_HOVER = tone("#00000029", "#7f7f7f47");
 const ROW_HOVER = tone("#00000014", "#7f7f7f24");
 
 // `proj` rewrites this line in the installed copy: a sidebar cannot read the project files.
-const BOARD = { projects: {}, kinds: [], browserProfile: "", proj: "" };
+const BOARD = { projects: {}, kinds: [], browserProfile: "", proj: "", home: "" };
 
 const workspaces = () => data.workspaces() ?? [];
 const groups = () => data.groups() ?? [];
@@ -149,10 +149,18 @@ function editLink(w, kind) {
 
 const shellQuote = (text) => "'" + String(text).replaceAll("'", "'\\''") + "'";
 
-// A sidebar cannot write the project files, so `proj` does it in a workspace of its own.
-// That workspace closes when the command succeeds and waits with the message when it fails;
-// the pause keeps a quick success from being taken for a crashed command.
+// A sidebar cannot write the project files, so `proj` does it. Wheelhouse IDE runs it out of
+// sight and shows the message when it fails.
+const RUNS_PROJ = IN_WHEELHOUSE && typeof wheelhouse.proj === "function" && Boolean(BOARD.home);
+
+// In cmux `proj` gets a workspace of its own, which closes when the command succeeds and
+// waits with the message when it fails; the pause keeps a quick success from being taken for
+// a crashed command.
 function runProj(args, title, failed) {
+  if (RUNS_PROJ) {
+    wheelhouse.proj(args, { home: BOARD.home, failed });
+    return;
+  }
   const command = BOARD.proj + " " + args.map(shellQuote).join(" ");
   cmux("workspace.create", {
     title,

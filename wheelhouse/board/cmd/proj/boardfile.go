@@ -41,6 +41,8 @@ type boardData struct {
 	BrowserProfile string                  `json:"browserProfile"`
 	// Proj is the shell command that runs this proj; the board uses it to save a link.
 	Proj string `json:"proj"`
+	// Home is the directory of the project files, for an app that runs its own proj.
+	Home string `json:"home"`
 }
 
 // boardDataFor lists every project with its links in the order of the link kinds. A link that
@@ -74,6 +76,7 @@ func boardDataFor(cfg *config, all []*Manifest) boardData {
 			home = abs
 		}
 		data.Proj = "WHEELHOUSE_HOME=" + shellQuote(home) + " " + shellQuote(exe)
+		data.Home = home
 	}
 	return data
 }

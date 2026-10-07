@@ -3125,6 +3125,16 @@ class TerminalController {
         case "wheelhouse.project.new":
             WheelhouseProjects.showNewProject()
             return v2Ok(id: id, result: ["window": WheelhouseNewProjectWindowController.windowIdentifier])
+        case "wheelhouse.proj.run":
+            guard let arguments = params["args"] as? [String], !arguments.isEmpty else {
+                return v2Error(id: id, code: "invalid_params", message: "args must be a list of strings")
+            }
+            WheelhouseProjects.runForBoard(
+                arguments,
+                home: params["home"] as? String,
+                failure: params["failed"] as? String
+            )
+            return v2Ok(id: id, result: ["started": true])
         case "workspace.cloud_vm_terminal_ready":
             return v2Result(id: id, self.v2WorkspaceCloudVMTerminalReady(params: params))
         case "workspace.cloud_vm_bind":
