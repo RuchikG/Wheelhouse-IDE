@@ -89,11 +89,6 @@ const others = computed(() => {
   return workspaces().filter((w) => !laneIds.has(w.group) && !anchors.has(w.id));
 });
 
-const needsYou = computed(() => {
-  const anchors = new Set(laneGroups().map((g) => g.anchorId));
-  return workspaces().filter((w) => !anchors.has(w.id) && agentInfo(w).needs.length > 0).length;
-});
-
 function statusColor(w) {
   const a = agentInfo(w);
   if (a.needs.length) return NEEDS_FILL;
@@ -567,6 +562,117 @@ function closedSection() {
   ];
 }
 
+// The sidebar shows the board, or every agent on it by what it is doing.
+const [view, setView] = signal("projects");
+
+const STATES = [
+  { status: "needs_input", label: "NEEDS YOU", color: NEEDS_FILL, text: NEEDS, strong: true },
+  { status: "working", label: "WORKING", color: WORKING, text: "tertiary", strong: false },
+  { status: "idle", label: "IDLE", color: IDLE, text: "tertiary", strong: false },
+];
+
+const liveAgents = computed(() => {
+  const anchors = new Set(laneGroups().map((g) => g.anchorId));
+  const out = [];
+  for (const w of workspaces()) {
+    if (anchors.has(w.id)) continue;
+    for (const a of w.agents ?? []) {
+      if (a.status !== "ended") out.push({ key: w.id + ":" + a.id, w, a });
+    }
+  }
+  return out;
+});
+
+const waitingAgents = computed(() => liveAgents().filter((e) => e.a.status === "needs_input").length);
+
+// The longest wait leads; the other states keep the order of the board.
+const agentsIn = (status) => () =>
+  liveAgents()
+    .filter((e) => e.a.status === status)
+    .sort((x, y) =>
+      (status === "needs_input" ? (x.a.sinceEpoch ?? 0) - (y.a.sinceEpoch ?? 0) : 0)
+      || x.w.index - y.w.index || (x.key < y.key ? -1 : 1));
+
+// An agent goes by the name of its tab, which `proj` sets from the project file, and its task
+// is its session's title or else the last prompt typed in that tab.
+const agentTab = (e) => (e.w.tabs ?? []).find((t) => t.id === e.a.panelId);
+const agentName = (e) => agentTab(e)?.title || e.a.name || e.a.kind || "agent";
+
+function agentTask(e) {
+  const running = (e.a.children ?? []).filter((c) => c.running).length;
+  const parts = [];
+  const task = e.a.title || agentTab(e)?.latestPrompt;
+  if (task) parts.push(task);
+  if (running) parts.push(running + (running === 1 ? " sub-agent" : " sub-agents"));
+  return parts.join(" · ");
+}
+
+function elapsed(since) {
+  const now = data.clock()?.epoch ?? 0;
+  if (!since || !now) return "";
+  const s = Math.max(0, Math.floor(now - since));
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m";
+  const h = Math.floor(m / 60);
+  return h < 24 ? h + "h" : Math.floor(h / 24) + "d";
+}
+
+function jumpToAgent(e) {
+  cmux("workspace.select", { workspace_id: e.w.id });
+  if (e.a.surfaceId) cmux("surface.focus", { surface_id: e.a.surfaceId, workspace_id: e.w.id });
+}
+
+function agentRow(e, state) {
+  return HStack({ spacing: 8 }, [
+    Circle({ size: 7 }).fill(state.color),
+    VStack({ spacing: 1 }, [
+      HStack({ spacing: 4 }, [
+        Text(() => agentName(e())).font(12).weight("semibold").lineLimit(1).truncation("tail"),
+        Text(() => "· " + (e().w.title ?? "")).font(11).color("secondary").lineLimit(1).truncation("tail"),
+        Spacer({ minLength: 0 }),
+      ]),
+      when(() => Boolean(agentTask(e())), "task", () =>
+        HStack({ spacing: 0 }, [
+          Text(() => agentTask(e())).font(11).color("secondary").lineLimit(1).truncation("tail"),
+          Spacer({ minLength: 0 }),
+        ])),
+    ]),
+    badge(() => (e().w.remote?.target ? "remote" : ""), "#5E5CE6").layoutPriority(2),
+    Text(() => elapsed(e().a.sinceEpoch ?? e().a.lastActivityAt))
+      .font(10).monospaced().color("tertiary").layoutPriority(2),
+  ])
+    .paddingHorizontal(10).paddingVertical(6)
+    .cornerRadius(8)
+    .background(state.strong ? NEEDS_CARD : CARD)
+    .hoverBackground(state.strong ? NEEDS_CARD_HOVER : CARD_HOVER)
+    .frame({ maxWidth: "infinity" })
+    .onTap(() => jumpToAgent(e()));
+}
+
+function stateSection(state) {
+  const items = agentsIn(state.status);
+  return VStack({ spacing: 4 }, [
+    HStack({ spacing: 6 }, [
+      Text(state.label).font(10).weight("semibold")
+        .color(() => (items().length ? state.text : "tertiary")),
+      Spacer(),
+      Text(() => (items().length ? String(items().length) : "—"))
+        .font(10).monospaced().color("tertiary"),
+    ]).paddingHorizontal(4),
+    ForEach({ items, key: (e) => e.key }, (e) => agentRow(e, state)),
+  ]);
+}
+
+function viewTab(id, label) {
+  return HStack({ spacing: 4 }, label)
+    .paddingHorizontal(8).paddingVertical(3)
+    .cornerRadius(6)
+    .background(() => (view() === id ? CARD_SELECTED : null))
+    .hoverBackground(CARD_HOVER)
+    .onTap(() => setView(id));
+}
+
 function headerButton(icon, help, action) {
   return Image(icon).font(12).color("secondary")
     .paddingHorizontal(5).paddingVertical(4)
@@ -587,21 +693,33 @@ function headerButtons() {
 
 sidebar(() =>
   VStack({ spacing: 12 }, [
-    HStack({ spacing: 6 }, [
-      Text("Projects").font(14).weight("semibold"),
+    HStack({ spacing: 2 }, [
+      viewTab("projects", [Text("Projects").font(13).weight("semibold").lineLimit(1).fixedSize("horizontal")]),
+      viewTab("agents", [
+        Text("Agents").font(13).weight("semibold").lineLimit(1).fixedSize("horizontal"),
+        Text(() => (waitingAgents() ? String(waitingAgents()) : ""))
+          .font(9).weight("bold").color("#1C1C1E").lineLimit(1).fixedSize("horizontal")
+          .paddingHorizontal(() => (waitingAgents() ? 5 : 0))
+          .paddingVertical(() => (waitingAgents() ? 1 : 0))
+          .background(() => (waitingAgents() ? NEEDS_FILL : null))
+          .cornerRadius(6),
+      ]),
       Spacer(),
-      Text(() => (needsYou() ? needsYou() + " waiting on you" : ""))
-        .font(10).weight("semibold").color(NEEDS),
       ...headerButtons(),
-    ]).paddingHorizontal(4),
-    ...emptyBoard(),
-    ...lanes(),
-    ...closedSection(),
-    VStack({ spacing: 2 }, [
-      Text(() => (others().length ? "NOT ON THE BOARD" : ""))
-        .font(10).weight("semibold").color("tertiary").paddingHorizontal(4),
-      ForEach({ items: others, key: (w) => w.id }, (w) => otherRow(w)),
     ]),
+    when(() => view() === "projects", "projects", () =>
+      VStack({ spacing: 12 }, [
+        ...emptyBoard(),
+        ...lanes(),
+        ...closedSection(),
+        VStack({ spacing: 2 }, [
+          Text(() => (others().length ? "NOT ON THE BOARD" : ""))
+            .font(10).weight("semibold").color("tertiary").paddingHorizontal(4),
+          ForEach({ items: others, key: (w) => w.id }, (w) => otherRow(w)),
+        ]),
+      ])),
+    when(() => view() === "agents", "agents", () =>
+      VStack({ spacing: 12 }, STATES.map(stateSection))),
     Spacer(),
   ]).paddingHorizontal(8).paddingVertical(8),
   { surface: "glass" }

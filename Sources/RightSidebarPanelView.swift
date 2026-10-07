@@ -165,10 +165,12 @@ struct RightSidebarPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            modeBar
-                .rightSidebarChromeBottomBorder(
-                    backgroundColor: windowAppearance.resolvedChromeBackgroundColor
-                )
+            if WheelhouseAgentsPanel.railWidth(fileExplorerState) == nil {
+                modeBar
+                    .rightSidebarChromeBottomBorder(
+                        backgroundColor: windowAppearance.resolvedChromeBackgroundColor
+                    )
+            }
             contentForMode
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

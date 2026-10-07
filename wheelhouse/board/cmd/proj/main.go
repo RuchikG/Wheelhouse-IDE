@@ -474,6 +474,11 @@ func openRemoteWorkspace(cfg *config, m *Manifest, cwd string, lane group) (stri
 		return "", fmt.Errorf("cmux ssh %s did not produce a workspace named %q", host, m.Name)
 	}
 	if agent != "" {
+		if name := m.Agents[0].Name; name != "" {
+			if _, err := cmux("rename-tab", "--workspace", ws.Ref, name); err != nil {
+				return "", err
+			}
+		}
 		if _, err := cmux("send", "--workspace", ws.Ref, agent+"\n"); err != nil {
 			return "", err
 		}

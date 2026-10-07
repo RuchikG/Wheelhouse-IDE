@@ -43,6 +43,20 @@ Design:
 - **Drag to move.** Drag a card to another lane, or to another place in its own; the name of the
   lane it would land in is tinted while you drag, and Escape gives up. The lane is saved in the
   project file. Cards that wait on you stay first in their lane wherever they are dropped.
+- **Agents view.** The switch at the top of the board turns it into a list of every agent in
+  every project, grouped Needs you, Working and Idle, with the longest wait first. A row shows
+  the agent's tab name, its project, its task (the last prompt typed in its tab), how many
+  sub-agents it is running and for how long it has been in that state; a click goes to that
+  agent. An agent that has finished its turn moves to Needs you after about a minute, when its
+  idle reminder fires. The switch carries the number
+  of agents waiting on you.
+- **Agents panel.** While the selected project has more than one agent (sub-agents count), a
+  panel on the right lists them with their state, task, sub-agents and folder. The button at
+  its top collapses it to a rail of one dot per agent, and the same button on the rail opens it
+  again. It goes away when the project is back to one agent, never replaces another right
+  sidebar that is open, and stays closed for a project once you close it there. This part
+  needs Wheelhouse IDE; `defaults write <bundle id> wheelhouse.agentsPanel.enabled -bool false`
+  turns it off.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip
@@ -72,7 +86,8 @@ Design:
 - **Remote projects** are ordinary cmux SSH workspaces; the card carries a badge.
 
 The board is built on cmux's own extension points (custom sidebars, workspace groups and the
-CLI), so it also works with stock cmux. Wheelhouse IDE adds three things around it: the first
-launch runs the set-up, the New Project form, and sidebar colours given per appearance. The
-sidebar script and `proj`, the small CLI behind all of it, are in
+CLI), so it also works with stock cmux. Wheelhouse IDE adds these around it: the first launch
+runs the set-up, the New Project form, sidebar colours given per appearance, the Agents panel,
+and agents on SSH hosts in the data a sidebar reads. The sidebar scripts and `proj`, the small
+CLI behind the board, are in
 [`wheelhouse/board`](../board/README.md).

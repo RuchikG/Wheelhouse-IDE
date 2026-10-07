@@ -4157,6 +4157,7 @@
 		C7B206ECEE3E020A96259AFF /* WebKitBrowserReplDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F63189EE1BF0052D9BDC241 /* WebKitBrowserReplDriver.swift */; };
 		A10020000000000000000019 /* WebSurfaceSelectionEvaluationOwner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1002000000000000000001A /* WebSurfaceSelectionEvaluationOwner.swift */; };
 		A10020000000000000000011 /* WebSurfaceSelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10020000000000000000012 /* WebSurfaceSelectionReader.swift */; };
+		7A3C51E2D90B4F6681AA2C10 /* WheelhouseAgents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3C51E2D90B4F6681AA2C11 /* WheelhouseAgents.swift */; };
 		E1C0DE00000000000000E103 /* WheelhouseCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0DE00000000000000E102 /* WheelhouseCodeEditor */; };
 		E1C0DE00000000000000E104 /* WheelhouseCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0DE00000000000000E102 /* WheelhouseCodeEditor */; };
 		E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */; };
@@ -8543,6 +8544,7 @@
 		9F63189EE1BF0052D9BDC241 /* WebKitBrowserReplDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserRepl/WebKitBrowserReplDriver.swift; sourceTree = "<group>"; };
 		A1002000000000000000001A /* WebSurfaceSelectionEvaluationOwner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/WebSurfaceSelectionEvaluationOwner.swift; sourceTree = "<group>"; };
 		A10020000000000000000012 /* WebSurfaceSelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/WebSurfaceSelectionReader.swift; sourceTree = "<group>"; };
+		7A3C51E2D90B4F6681AA2C11 /* WheelhouseAgents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseAgents.swift; sourceTree = "<group>"; };
 		E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseDefaults.swift; sourceTree = "<group>"; };
 		EF0B100FE158AA078B564C48 /* WheelhouseProjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseProjects.swift; sourceTree = "<group>"; };
 		A5001222 /* WindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAccessor.swift; sourceTree = "<group>"; };
@@ -11911,6 +11913,7 @@
 				AC616BEADB26FE7A9AD00228 /* TerminalController+BrowserRepl.swift */,
 				A6C719FAEB13BCC9380A04CD /* Workspace+RestoredAgentNotifications.swift */,
 				EF0B100FE158AA078B564C48 /* WheelhouseProjects.swift */,
+				7A3C51E2D90B4F6681AA2C11 /* WheelhouseAgents.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -16640,6 +16643,7 @@
 				C7B206ECEE3E020A96259AFF /* WebKitBrowserReplDriver.swift in Sources */,
 				A10020000000000000000019 /* WebSurfaceSelectionEvaluationOwner.swift in Sources */,
 				A10020000000000000000011 /* WebSurfaceSelectionReader.swift in Sources */,
+				7A3C51E2D90B4F6681AA2C10 /* WheelhouseAgents.swift in Sources */,
 				E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */,
 				172B96819F6CFA00C632ACE6 /* WheelhouseProjects.swift in Sources */,
 				A500120C /* WindowAccessor.swift in Sources */,

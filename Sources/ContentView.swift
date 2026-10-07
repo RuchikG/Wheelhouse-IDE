@@ -1848,7 +1848,7 @@ struct ContentView: View {
     }
 
     private var rightSidebarWidth: CGFloat {
-        rightSidebarVisible ? fileExplorerWidth : 0
+        rightSidebarVisible ? WheelhouseAgentsPanel.railWidth(fileExplorerState) ?? fileExplorerWidth : 0
     }
 
     private func sidebarBackdropLayer(

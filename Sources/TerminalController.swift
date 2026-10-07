@@ -3135,6 +3135,12 @@ class TerminalController {
                 failure: params["failed"] as? String
             )
             return v2Ok(id: id, result: ["started": true])
+        case "wheelhouse.agents_panel.set":
+            guard let collapsed = v2Bool(params, "collapsed") else {
+                return v2Error(id: id, code: "invalid_params", message: "collapsed must be true or false")
+            }
+            WheelhouseAgentsPanel.setCollapsed(collapsed)
+            return v2Ok(id: id, result: ["collapsed": collapsed])
         case "workspace.cloud_vm_terminal_ready":
             return v2Result(id: id, self.v2WorkspaceCloudVMTerminalReady(params: params))
         case "workspace.cloud_vm_bind":

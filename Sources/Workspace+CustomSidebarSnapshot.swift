@@ -45,7 +45,7 @@ extension Workspace {
             latestSubmittedMessage: latestSubmittedMessage,
             latestSubmittedAt: latestSubmittedAt,
             remote: remote,
-            agents: customSidebarAgentSnapshots(),
+            agents: WheelhouseRemoteAgents.merging(customSidebarAgentSnapshots(), in: self),
             groupId: groupId,
             taskStatus: effectiveTaskStatus.rawValue
         )

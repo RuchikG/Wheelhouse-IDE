@@ -110,12 +110,18 @@ key monitor, the built-in tab bar actions), for the one-line telemetry rule in
 fork's preferences, for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift` that
 makes agent hooks on SSH hosts opt-in, and for the two checks (`Sources/cmuxApp.swift`,
 `Sources/TerminalSurfaceRuntimeWiring.swift`) that keep Computer Use off until asked for. The
-project board adds: one line in `AppDelegate.applicationDidFinishLaunching` (the first-launch
-set-up), the `wheelhouse.project.new` and `wheelhouse.proj.run` socket methods
+project board adds: two lines in `AppDelegate.applicationDidFinishLaunching` (the first-launch
+set-up and the Agents panel), the `wheelhouse.project.new` and `wheelhouse.proj.run` socket methods
 (`Sources/TerminalController.swift` and its capabilities list), the File > New Project… item and the form's window id in
 `Sources/cmuxApp.swift`, and two additions to the custom-sidebar package
 (`Packages/macOS/CmuxSwiftRenderUI`): a `wheelhouse` global in `SidebarRuntime.js`, by which a
-sidebar knows it runs in this app and has it run `proj`, and `light|dark` colour pairs in `RenderStyle.swift`. Two
+sidebar knows it runs in this app and has it run `proj`, and `light|dark` colour pairs in `RenderStyle.swift`.
+The Agents panel (`Sources/WheelhouseAgents.swift`) adds the `wheelhouse.agents_panel.set` socket
+method, one line each in `Sources/ContentView.swift` and `Sources/RightSidebarPanelView.swift` for
+the rail's width and its hidden mode bar, and two lines that put agents on SSH hosts into a
+sidebar's `agents` and take out sessions that are no longer running, such as the ones restored
+at launch (`Sources/RemoteTui/SSHTuiAgentStatusProjector.swift`,
+`Sources/Workspace+CustomSidebarSnapshot.swift`). Two
 additions keep `claude` working in the app's terminals when it is installed as a shell alias
 or outside the `PATH` (`Resources/shell-integration/cmux-zsh-integration.zsh`,
 `Resources/bin/cmux-claude-wrapper`). The tab right-click menu is built by the Bonsplit submodule, which

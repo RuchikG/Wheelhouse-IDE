@@ -28,5 +28,6 @@ wheelhouse_bundle_board() {
       go build -trimpath -ldflags "-s -w" -o "$1/Contents/Resources/bin/proj" ./cmd/proj)
   fi
   mkdir -p "$1/Contents/Resources/sidebars"
-  cp "$WHEELHOUSE_ROOT/wheelhouse/board/sidebars/projects-board.js" "$1/Contents/Resources/sidebars/"
+  cp "$WHEELHOUSE_ROOT/wheelhouse/board/sidebars/projects-board.js" \
+    "$WHEELHOUSE_ROOT/wheelhouse/board/sidebars/project-agents.js" "$1/Contents/Resources/sidebars/"
 }

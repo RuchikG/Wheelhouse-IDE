@@ -46,6 +46,7 @@ final class SSHTuiAgentStatusProjector {
                   let badge = resource.agent, let status = RemoteAgentSidebarStatus(badge: badge) else { continue }
             desired[projection.workspaceID, default: [:]][projection.panelID] = status
         }
+        WheelhouseRemoteAgents.update(desired)
         var nextLifecycles: [UUID: [UUID: String]] = [:]
         var nextWorkspacesWithStatus: Set<UUID> = []
         for workspaceID in workspacesWithStatus.union(appliedLifecycles.keys).union(desired.keys) {

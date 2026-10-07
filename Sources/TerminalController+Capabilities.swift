@@ -280,6 +280,7 @@ extension TerminalController {
             "settings.open",
             "wheelhouse.project.new",
             "wheelhouse.proj.run",
+            "wheelhouse.agents_panel.set",
             "feedback.open",
             "feedback.submit",
             "feed.push",

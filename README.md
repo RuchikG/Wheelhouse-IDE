@@ -38,6 +38,10 @@ DONE              —
   drag it to another lane as the work moves on.
   The links open in the app's browser, and one button copies your sign-ins from Chrome so that
   they open signed in.
+- **Many agents per project.** The board's Agents view lists every agent across your projects
+  by what it is doing, with the ones waiting on you first. When a project runs more than one
+  agent, an Agents panel opens on the right with each agent's task and sub-agents; it collapses
+  to a narrow rail. Agents on SSH hosts are listed with the local ones.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
@@ -96,6 +100,20 @@ sidebar, and an **Example Project** to look around in.
 4. **Stay signed in.** Link tabs have their own cookies. Click the key button at the top of the
    board to copy your sign-ins from Chrome or another browser, so the pages behind a sign-in
    open as they do there. macOS asks once for access to the browser's key in your keychain.
+5. **Run several agents.** Start an agent in each tab you need. **Agents** at the top of the
+   board lists every agent in every project by what it is doing, the ones waiting on you first;
+   click one to go to it.
+
+   <p align="center">
+     <img src="wheelhouse/docs/images/agents-view.png" width="620" alt="The board's Agents view: two agents under Needs you, one under Working and one under Idle, each with its project and task">
+   </p>
+
+   When a project has more than one agent, the Agents panel opens on the right with each
+   agent's state and task. Its button collapses it to a narrow rail.
+
+   <p align="center">
+     <img src="wheelhouse/docs/images/agents-panel.png" width="400" alt="The Agents panel on the right of a project: three agents, one waiting, one working and one idle">
+   </p>
 
 That is all a local project needs. More in [Project board](wheelhouse/board/README.md) and
 [Code editor](wheelhouse/docs/editor.md).
