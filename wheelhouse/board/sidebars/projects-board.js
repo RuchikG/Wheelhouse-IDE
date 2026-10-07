@@ -117,6 +117,8 @@ function jump(w) {
 
 // Link chips use sidebar features that older cmux releases lack; there the board goes without.
 const HAS_CHIPS = typeof Text("").fixedSize === "function" && typeof Text("").cursor === "function";
+// Keeps a short label on one line at its own width where the runtime can.
+const snug = (text) => (typeof text.fixedSize === "function" ? text.fixedSize("horizontal") : text);
 const KINDS = HAS_CHIPS ? BOARD.kinds ?? [] : [];
 
 const project = (w) => BOARD.projects[w?.title];
@@ -694,11 +696,10 @@ function headerButtons() {
 sidebar(() =>
   VStack({ spacing: 12 }, [
     HStack({ spacing: 2 }, [
-      viewTab("projects", [Text("Projects").font(13).weight("semibold").lineLimit(1).fixedSize("horizontal")]),
+      viewTab("projects", [snug(Text("Projects").font(13).weight("semibold").lineLimit(1))]),
       viewTab("agents", [
-        Text("Agents").font(13).weight("semibold").lineLimit(1).fixedSize("horizontal"),
-        Text(() => (waitingAgents() ? String(waitingAgents()) : ""))
-          .font(9).weight("bold").color("#1C1C1E").lineLimit(1).fixedSize("horizontal")
+        snug(Text("Agents").font(13).weight("semibold").lineLimit(1)),
+        snug(Text(() => (waitingAgents() ? String(waitingAgents()) : "")).font(9).weight("bold").color("#1C1C1E").lineLimit(1))
           .paddingHorizontal(() => (waitingAgents() ? 5 : 0))
           .paddingVertical(() => (waitingAgents() ? 1 : 0))
           .background(() => (waitingAgents() ? NEEDS_FILL : null))
