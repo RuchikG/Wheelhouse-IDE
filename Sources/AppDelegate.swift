@@ -14778,10 +14778,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 
         // Wheelhouse: the focused code editor handles its own shortcuts.
-        if CodeEditorShortcuts.claims(
+        if CodeEditorShortcuts.focusedEditorClaims(
             characters: KeyboardLayout.normalizedCharacters(for: event),
-            modifierFlags: event.modifierFlags
-        ), CodeEditorShortcuts.isEditorFocused(
+            modifierFlags: event.modifierFlags,
             firstResponder: (resolvedShortcutEventWindow(event) ?? shortcutRoutingActiveWindow)?.firstResponder
         ) {
             clearConfiguredShortcutChordState()

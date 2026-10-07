@@ -42,6 +42,18 @@ export class FileFinder {
     });
   }
 
+  focus(): void {
+    this.input.focus();
+    this.input.select();
+  }
+
+  clear(): void {
+    if (this.input.value !== "") {
+      this.input.value = "";
+      this.render();
+    }
+  }
+
   /** Files come and go while the field is unused, so each visit lists them again. */
   private async refresh(): Promise<void> {
     this.index = await this.loadIndex();
@@ -116,8 +128,4 @@ export class FileFinder {
     this.open(path);
   }
 
-  private clear(): void {
-    this.input.value = "";
-    this.render();
-  }
 }

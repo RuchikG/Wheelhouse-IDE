@@ -54,6 +54,11 @@ export class HostRequests {
     return this.request((id) => postToHost({ type: "fs", id, op: "index", path: root }));
   }
 
+  /** The lines of the project's files that contain `query`, with paths relative to `root`. */
+  search(root: string, query: string): Promise<FileResult> {
+    return this.request((id) => postToHost({ type: "fs", id, op: "search", path: root, query }));
+  }
+
   confirmClose(name: string): Promise<CloseChoice> {
     return this.request((id) => postToHost({ type: "confirmClose", id, name }));
   }

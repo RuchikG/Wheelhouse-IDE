@@ -24,6 +24,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
     private var sentProject: CodeEditorProject?
     /// Where the page's file requests go, with the project it was made for.
     private var files: (project: CodeEditorProject?, access: any ProjectFiles)?
+    /// The search in files that is still wanted.
+    private var search: Task<FileReply, Never>?
     private var options: CodeEditorOptions?
     private var theme: CodeEditorTheme?
     private var sentOptions: CodeEditorOptions?
@@ -85,6 +87,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             forMainFrameOnly: true
         ))
         let webView = CodeEditorWebView(frame: .zero, configuration: configuration)
+        webView.showsProject = project != nil
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false
@@ -111,6 +114,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         self.project = project
         self.options = options
         self.theme = theme
+        webView?.showsProject = true
         flush()
     }
 
@@ -226,18 +230,25 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         let content = body["content"] as? String
         let expectedModified = body["modified"] as? Double
         let destination = body["to"] as? String
+        let query = body["query"] as? String
         if operation == "trash", !confirmTrash(path) {
             send(FileReply.failed("cancelled").message(id: id))
             return
         }
         let generation = pageGeneration
+        let work = Task.detached { () -> FileReply in
+            await Self.perform(
+                operation, path: path, content: content, expectedModified: expectedModified,
+                destination: destination, query: query, in: files
+            )
+        }
+        if operation == "search" {
+            // Only the latest search is wanted.
+            search?.cancel()
+            search = work
+        }
         Task { [weak self] in
-            let reply = await Task.detached { () -> FileReply in
-                await Self.perform(
-                    operation, path: path, content: content, expectedModified: expectedModified,
-                    destination: destination, in: files
-                )
-            }.value
+            let reply = await work.value
             guard let self, self.pageGeneration == generation else { return }
             if case .changedOnDisk = reply, let content {
                 self.resolveChangedOnDisk(id: id, path: path, content: content, files: files)
@@ -252,6 +263,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         case file(ProjectFileSystem.File)
         case written(Double)
         case index([String], isComplete: Bool)
+        case matches([ProjectFileSystem.Match], isComplete: Bool)
         case done
         case changedOnDisk
         case failed(String)
@@ -269,6 +281,14 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 message["modified"] = modified
             case .index(let paths, let isComplete):
                 message["paths"] = paths
+                message["complete"] = isComplete
+            case .matches(let matches, let isComplete):
+                message["matches"] = matches.map { match in
+                    [
+                        "path": match.path, "line": match.line, "column": match.column, "text": match.text,
+                        "matchStart": match.matchStart, "matchLength": match.matchLength,
+                    ] as [String: Any]
+                }
                 message["complete"] = isComplete
             case .done:
                 break
@@ -304,6 +324,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         content: String?,
         expectedModified: Double?,
         destination: String? = nil,
+        query: String? = nil,
         in files: any ProjectFiles
     ) async -> FileReply {
         do {
@@ -331,6 +352,9 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             case "index":
                 let index = try await files.index()
                 return .index(index.paths, isComplete: index.isComplete)
+            case "search":
+                let found = try await files.search(query ?? "")
+                return .matches(found.matches, isComplete: found.isComplete)
             default:
                 return .failed("unsupported")
             }
@@ -344,6 +368,8 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             return .failed("outsideProject")
         } catch ProjectFileSystem.Failure.exists {
             return .failed("exists")
+        } catch is CancellationError {
+            return .failed("cancelled")
         } catch {
             return .failed("unreadable")
         }

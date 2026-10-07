@@ -99,6 +99,19 @@ final class RemoteProjectFiles: ProjectFiles, @unchecked Sendable {
         return (reply["paths"] as? [String] ?? [], reply["complete"] as? Bool ?? true)
     }
 
+    func search(_ query: String) async throws -> (matches: [ProjectFileSystem.Match], isComplete: Bool) {
+        let reply = try await request("search", path: "/", fields: ["query": query])
+        let matches = (reply["matches"] as? [[String: Any]] ?? []).compactMap { match -> ProjectFileSystem.Match? in
+            guard let path = match["path"] as? String, let line = match["line"] as? Int,
+                  let column = match["column"] as? Int, let text = match["text"] as? String,
+                  let start = match["matchStart"] as? Int, let length = match["matchLength"] as? Int else { return nil }
+            return ProjectFileSystem.Match(
+                path: path, line: line, column: column, text: text, matchStart: start, matchLength: length
+            )
+        }
+        return (matches, reply["complete"] as? Bool ?? true)
+    }
+
     func close() {
         lock.lock()
         let process = self.process

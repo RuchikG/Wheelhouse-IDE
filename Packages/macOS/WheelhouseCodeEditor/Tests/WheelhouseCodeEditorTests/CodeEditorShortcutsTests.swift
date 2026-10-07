@@ -21,6 +21,30 @@ import Testing
         #expect(!CodeEditorShortcuts.claims(characters: "d", modifierFlags: .control))
     }
 
+    @Test func aFolderTabAlsoClaimsFindFileSearchAndSaveAll() {
+        #expect(CodeEditorShortcuts.claimsInProject(characters: "p", modifierFlags: .command))
+        #expect(CodeEditorShortcuts.claimsInProject(characters: "F", modifierFlags: [.command, .shift]))
+        #expect(CodeEditorShortcuts.claimsInProject(characters: "s", modifierFlags: [.command, .option, .capsLock]))
+        #expect(!CodeEditorShortcuts.claimsInProject(characters: "p", modifierFlags: [.command, .shift]))
+        #expect(!CodeEditorShortcuts.claimsInProject(characters: "s", modifierFlags: .command))
+    }
+
+    @MainActor
+    @Test func onlyAFocusedFolderTabClaimsTheFolderShortcuts() {
+        let single = CodeEditorWebView()
+        let folder = CodeEditorWebView()
+        folder.showsProject = true
+        let claims = { (key: String, flags: NSEvent.ModifierFlags, responder: NSResponder?) in
+            CodeEditorShortcuts.focusedEditorClaims(characters: key, modifierFlags: flags, firstResponder: responder)
+        }
+        #expect(claims("p", .command, folder))
+        #expect(claims("f", .command, folder))
+        #expect(!claims("p", .command, single))
+        #expect(claims("f", .command, single))
+        #expect(!claims("p", .command, NSTextView()))
+        #expect(!claims("f", .command, nil))
+    }
+
     @MainActor
     @Test func recognizesFocusInsideTheEditorWebViewOnly() {
         let webView = CodeEditorWebView()

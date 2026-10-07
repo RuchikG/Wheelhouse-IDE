@@ -34,14 +34,15 @@ DONE              —
 
 - **Project board.** A kanban board in the sidebar: one card per project, in lanes from Design to
   Done. A card shows its branch and pull request, how many agents are running and how many are
-  waiting on you, and links to the project's documents. Click a card to jump into its workspace.
+  waiting on you, and links to the project's documents. Click a card to jump into its workspace;
+  drag it to another lane as the work moves on.
   The links open in the app's browser, and one button copies your sign-ins from Chrome so that
   they open signed in.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
-- **Folder tabs.** Open a folder as one tab with a file tree, a strip of open files, file search
-  by name, and create, rename and delete from the tree.
+- **Folder tabs.** Open a folder as one tab with a file tree, a strip of open files, find a file
+  by name, search inside files, and create, rename and delete from the tree.
 - **Language servers.** Completion, hover, go to definition, references, rename and diagnostics.
   Go works out of the box with `gopls`; any other LSP server can be added with one setting.
 - **Remote hosts.** Open a folder on another machine over SSH. Files are edited and saved there,
@@ -128,7 +129,6 @@ What we plan to work on next, roughly in this order within each area.
 
 **Project board**
 
-- Drag a card from one lane to another.
 - Show status from outside tools on the card: the state of its tracker item and of its
   pipeline, not only the link to them.
 - Show whether agents on SSH hosts are working, waiting or idle, like local ones.
@@ -139,8 +139,6 @@ What we plan to work on next, roughly in this order within each area.
 
 **Code editor**
 
-- Search inside files, across a folder.
-- Save All, and a shortcut for Find file.
 - Remember which folders were expanded, and show the open file in the tree.
 - Save single remote files back to their host (today a remote folder tab is needed).
 - Bring language features back by themselves after a dropped connection to a host.

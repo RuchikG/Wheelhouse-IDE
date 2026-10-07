@@ -63,6 +63,22 @@ import Testing
         #expect(try await files.read(path).content == "# mine\n")
     }
 
+    @Test func searchesInFilesLikeTheLocalSearch() async throws {
+        let (root, files) = try makeProject()
+        defer {
+            files.close()
+            try? FileManager.default.removeItem(at: root)
+        }
+        try ProjectSearchFixture.write(into: root)
+        let local = ProjectFileSystem(root: root.path)
+        for query in ProjectSearchFixture.queries {
+            let remote = try await files.search(query)
+            let here = try local.search(query)
+            #expect(remote.matches == here.matches, "query \(query)")
+            #expect(remote.isComplete == here.isComplete)
+        }
+    }
+
     @Test func createsRenamesDeletesAndIndexes() async throws {
         let (root, files) = try makeProject()
         defer {

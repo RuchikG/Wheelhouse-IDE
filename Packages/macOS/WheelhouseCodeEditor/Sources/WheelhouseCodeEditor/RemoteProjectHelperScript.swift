@@ -5,7 +5,7 @@ enum RemoteProjectHelperScript {
     static let source = #"""
 # Runs on the remote host: answers a project editor's file requests, one JSON
 # object per line in, one per line out. Works with Python 3.6 and later.
-import json, os, re, shutil, sys
+import json, os, re, shutil, sys, time
 
 # argv[1] is this program, as the launcher passed it.
 ROOT = sys.argv[2]
@@ -14,6 +14,10 @@ MAXIMUM_FILE_SIZE = 8 * 1024 * 1024
 MAXIMUM_INDEXED_FILES = 20000
 HIDDEN = {".git", ".DS_Store"}
 UNINDEXED = {".git", "node_modules"}
+MAXIMUM_MATCHES = 1000
+MAXIMUM_SEARCHED_FILE_SIZE = 1024 * 1024
+MAXIMUM_SEARCH_SECONDS = 10.0
+MAXIMUM_MATCH_TEXT = 240
 
 
 class Refused(Exception):
@@ -38,6 +42,74 @@ def require_new(path):
 
 def natural(name):
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", name)]
+
+
+def units(text):
+    # The length the editor counts: UTF-16 units.
+    return len(text.encode("utf-16-le")) // 2
+
+
+def match_in(line, pattern):
+    found = pattern.search(line)
+    if found is None:
+        return None
+    at = found.start()
+    start = 0
+    if len(line) > MAXIMUM_MATCH_TEXT:
+        start = max(0, min(at - MAXIMUM_MATCH_TEXT // 4, len(line) - MAXIMUM_MATCH_TEXT))
+    text = line[start:start + MAXIMUM_MATCH_TEXT]
+    return {
+        "column": units(line[:at]) + 1,
+        "text": text,
+        "matchStart": units(text[:at - start]),
+        "matchLength": units(text[at - start:found.end() - start]),
+    }
+
+
+def search(query):
+    if not query:
+        return {"matches": [], "complete": True}
+    # Letter case counts only when the query has a capital letter.
+    pattern = re.compile(re.escape(query), 0 if query != query.lower() else re.IGNORECASE)
+    deadline = time.time() + MAXIMUM_SEARCH_SECONDS
+    matches, complete = [], True
+    for folder, folders, names in os.walk(ROOT):
+        folders[:] = [name for name in folders if name not in UNINDEXED]
+        for name in names:
+            if name in HIDDEN:
+                continue
+            if time.time() > deadline:
+                complete = False
+                break
+            path = os.path.join(folder, name)
+            try:
+                if not 0 < os.path.getsize(path) <= MAXIMUM_SEARCHED_FILE_SIZE:
+                    continue
+                with open(path, "rb") as file:
+                    data = file.read()
+                if b"\0" in data:
+                    continue
+                content = data.decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if pattern.search(content) is None:
+                continue
+            relative = os.path.relpath(path, ROOT)
+            for number, line in enumerate(content.split("\n"), 1):
+                found = match_in(line[:-1] if line.endswith("\r") else line, pattern)
+                if found is None:
+                    continue
+                if len(matches) == MAXIMUM_MATCHES:
+                    complete = False
+                    break
+                found.update(path=relative, line=number)
+                matches.append(found)
+            if not complete:
+                break
+        if not complete:
+            break
+    matches.sort(key=lambda match: (natural(match["path"]), match["line"]))
+    return {"matches": matches, "complete": complete}
 
 
 def handle(request):
@@ -114,6 +186,8 @@ def handle(request):
                 break
         paths.sort(key=natural)
         return {"paths": paths, "complete": complete}
+    if op == "search":
+        return search(request.get("query") or "")
     raise Refused("unsupported")
 
 

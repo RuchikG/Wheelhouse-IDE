@@ -17,6 +17,20 @@ struct ProjectFileSystem: Sendable {
         var isReadOnly: Bool
     }
 
+    /// A line that contains what was searched for.
+    struct Match: Equatable, Sendable {
+        /// Relative to the root.
+        var path: String
+        /// Both count from 1; the column is in UTF-16 units, as the editor counts.
+        var line: Int
+        var column: Int
+        /// The line, or the part of a long line around the match.
+        var text: String
+        /// Where the match is in `text`, in UTF-16 units.
+        var matchStart: Int
+        var matchLength: Int
+    }
+
     enum Failure: Error, Equatable {
         case outsideProject
         case notText
@@ -31,6 +45,13 @@ struct ProjectFileSystem: Sendable {
     static let maximumFileSize = 8 * 1024 * 1024
     /// How many paths `index` returns at most.
     static let maximumIndexedFiles = 20_000
+    /// Where a search in files stops: this many lines found, files larger than this left out,
+    /// and no longer than this many seconds.
+    static let maximumMatches = 1000
+    static let maximumSearchedFileSize = 1024 * 1024
+    static let maximumSearchSeconds = 10.0
+    /// How much of a long line a match carries.
+    static let maximumMatchText = 240
     private static let hiddenNames: Set<String> = [".git", ".DS_Store"]
     /// Folders whose contents are not worth finding files in.
     private static let unindexedNames: Set<String> = [".git", "node_modules"]
@@ -164,6 +185,74 @@ struct ProjectFileSystem: Sendable {
             paths.append(path)
         }
         return (paths.sorted { $0.localizedStandardCompare($1) == .orderedAscending }, isComplete)
+    }
+
+    /// The lines under the root that contain `query`, by path and line. Letter case counts
+    /// only when the query has a capital letter. Binary and very large files and the folders
+    /// `index` skips are left out.
+    func search(_ query: String) throws -> (matches: [Match], isComplete: Bool) {
+        guard let root else { throw Failure.outsideProject }
+        guard !query.isEmpty else { return ([], true) }
+        guard let walker = FileManager.default.enumerator(atPath: root) else { throw Failure.unreadable(root) }
+        let options: NSString.CompareOptions = query.contains(where: \.isUppercase) ? [.literal] : [.literal, .caseInsensitive]
+        let deadline = Date().addingTimeInterval(Self.maximumSearchSeconds)
+        var matches: [Match] = []
+        var isComplete = true
+        files: for case let path as String in walker {
+            try Task.checkCancellation()
+            let name = (path as NSString).lastPathComponent
+            if walker.fileAttributes?[.type] as? FileAttributeType == .typeDirectory {
+                if Self.unindexedNames.contains(name) { walker.skipDescendants() }
+                continue
+            }
+            if Self.hiddenNames.contains(name) { continue }
+            if Date() > deadline {
+                isComplete = false
+                break
+            }
+            let size = (walker.fileAttributes?[.size] as? NSNumber)?.intValue ?? 0
+            guard size > 0, size <= Self.maximumSearchedFileSize,
+                  let data = FileManager.default.contents(atPath: root + "/" + path), !data.contains(0),
+                  let content = String(data: data, encoding: .utf8),
+                  content.range(of: query, options: options) != nil else { continue }
+            var number = 0
+            // Not `split`: to Swift a carriage return and line feed are one character.
+            for line in content.components(separatedBy: "\n") {
+                number += 1
+                guard let match = Self.match(of: query, in: line, options: options) else { continue }
+                if matches.count == Self.maximumMatches {
+                    isComplete = false
+                    break files
+                }
+                matches.append(Match(
+                    path: path, line: number, column: match.column, text: match.text,
+                    matchStart: match.start, matchLength: match.length
+                ))
+            }
+        }
+        matches.sort { left, right in
+            if left.path != right.path { return left.path.localizedStandardCompare(right.path) == .orderedAscending }
+            return left.line < right.line
+        }
+        return (matches, isComplete)
+    }
+
+    /// The first match in a line, with the line cut down around it when it is long.
+    private static func match(
+        of query: String, in line: String, options: NSString.CompareOptions
+    ) -> (column: Int, text: String, start: Int, length: Int)? {
+        let text = (line.hasSuffix("\r") ? String(line.dropLast()) : line) as NSString
+        let found = text.range(of: query, options: options)
+        guard found.location != NSNotFound else { return nil }
+        guard text.length > maximumMatchText else {
+            return (found.location + 1, text as String, found.location, found.length)
+        }
+        let from = max(0, min(found.location - maximumMatchText / 4, text.length - maximumMatchText))
+        let shown = text.rangeOfComposedCharacterSequences(for: NSRange(location: from, length: maximumMatchText))
+        return (
+            found.location + 1, text.substring(with: shown),
+            found.location - shown.location, min(found.length, NSMaxRange(shown) - found.location)
+        )
     }
 
     private func isRoot(_ path: String) -> Bool {

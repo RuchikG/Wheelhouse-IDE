@@ -13,6 +13,7 @@ import { HostRequests } from "./hostRequests";
 import { LanguageClients } from "./languageClient";
 import { FileFinder } from "./projectFinder";
 import { showMenu, type MenuItem } from "./projectMenu";
+import { ContentSearch } from "./projectSearch";
 
 type OpenFile = {
   path: string;
@@ -105,6 +106,27 @@ export class ProjectEditor {
     },
     (path) => void this.openFile(`${this.root}/${path}`),
     (isSearching) => {
+      if (isSearching) {
+        this.search.clear();
+      }
+      this.treeList.hidden = isSearching;
+    },
+  );
+  private readonly search = new ContentSearch(
+    async (query) => {
+      const result = await this.host.search(this.root, query);
+      return { matches: result.matches ?? [], isComplete: result.complete ?? true };
+    },
+    (match) =>
+      void this.openFile(
+        `${this.root}/${match.path}`,
+        { line: match.line, column: match.column },
+        match.column + match.matchLength,
+      ),
+    (isSearching) => {
+      if (isSearching) {
+        this.finder.clear();
+      }
       this.treeList.hidden = isSearching;
     },
   );
@@ -118,7 +140,9 @@ export class ProjectEditor {
     const header = element("div", "project-tree-header");
     this.treeHost.hidden = true;
     header.append(this.treeTitle, this.treeHost, refresh);
-    tree.append(header, this.finder.input, this.finder.list, this.treeList);
+    this.finder.input.title = "Find file (⌘P)";
+    this.search.input.title = "Search in files (⇧⌘F)";
+    tree.append(header, this.finder.input, this.search.input, this.finder.list, this.search.list, this.treeList);
     const resizer = element("div", "project-resizer");
     const main = element("main", "project-main");
     this.notice.hidden = true;
@@ -143,6 +167,8 @@ export class ProjectEditor {
     this.treeList.addEventListener("contextmenu", (event) => this.showTreeMenu(event));
     this.strip.addEventListener("click", (event) => this.handleStripClick(event));
     this.strip.addEventListener("auxclick", (event) => this.handleStripClick(event));
+    this.strip.addEventListener("contextmenu", (event) => this.showStripMenu(event));
+    window.addEventListener("keydown", (event) => this.handleShortcut(event), true);
     window.addEventListener("focus", () => {
       void this.renderTree();
       if (this.active) {
@@ -520,7 +546,12 @@ export class ProjectEditor {
     }
   }
 
-  private async openFile(path: string, position?: { line: number; column: number }): Promise<void> {
+  /** @param endColumn Selects from the position's column to this one, both on its line. */
+  private async openFile(
+    path: string,
+    position?: { line: number; column: number },
+    endColumn?: number,
+  ): Promise<void> {
     const file = await this.loadFile(path);
     if (!file) {
       return;
@@ -528,6 +559,9 @@ export class ProjectEditor {
     this.activate(file);
     if (position) {
       reveal(this.editor, position.line, position.column);
+      if (endColumn !== undefined) {
+        this.editor.setSelection(new monaco.Range(position.line, position.column, position.line, endColumn));
+      }
     }
   }
 
@@ -682,6 +716,45 @@ export class ProjectEditor {
     } else if (result.error !== "changedOnDisk") {
       this.showNotice(`${file.name} could not be saved.`);
     }
+  }
+
+  private async saveAll(): Promise<void> {
+    for (const file of Array.from(this.files.values())) {
+      await this.save(file);
+    }
+  }
+
+  /** The shortcuts of a folder tab, wherever in the page the keyboard is. */
+  private handleShortcut(event: KeyboardEvent): void {
+    if (!event.metaKey || event.ctrlKey) {
+      return;
+    }
+    if (event.code === "KeyP" && !event.shiftKey && !event.altKey) {
+      this.finder.focus();
+    } else if (event.code === "KeyF" && event.shiftKey && !event.altKey) {
+      this.search.focus();
+    } else if (event.code === "KeyS" && event.altKey && !event.shiftKey) {
+      void this.saveAll();
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  private showStripMenu(event: MouseEvent): void {
+    event.preventDefault();
+    const tab = (event.target as HTMLElement).closest<HTMLElement>(".project-tab");
+    const file = tab?.dataset.path ? this.files.get(tab.dataset.path) : undefined;
+    const items: MenuItem[] = [];
+    if (file) {
+      items.push({ label: "Save", run: () => void this.save(file) });
+    }
+    items.push({ label: "Save All", run: () => void this.saveAll() });
+    if (file) {
+      items.push({ label: "Close", run: () => void this.closeFile(file) });
+    }
+    showMenu(this.container, event.clientX, event.clientY, items);
   }
 
   private handleStripClick(event: MouseEvent): void {

@@ -13,6 +13,8 @@ protocol ProjectFiles: Sendable {
     /// Removes a file or folder: to the Trash where there is one, for good otherwise.
     func trash(_ path: String) async throws
     func index() async throws -> (paths: [String], isComplete: Bool)
+    /// The lines of the project's files that contain `query`.
+    func search(_ query: String) async throws -> (matches: [ProjectFileSystem.Match], isComplete: Bool)
     /// Ends whatever the implementation keeps running.
     func close()
 }

@@ -1,3 +1,5 @@
+import type { SearchMatch } from "./contentSearch";
+
 /** Messages the native host sends through `window.cmuxCodeEditor.receive`. */
 export type CodeEditorHostMessage =
   | { type: "document"; path: string; content: string; sequence: number; readOnly: boolean }
@@ -31,6 +33,8 @@ export type FileResult = {
   readOnly?: boolean;
   /** For `index`: files as paths relative to the project root, and whether that is all of them. */
   paths?: string[];
+  /** For `search`: the matching lines. `complete` is whether that is all of them, as for `index`. */
+  matches?: SearchMatch[];
   complete?: boolean;
   error?: string;
 };
@@ -43,7 +47,8 @@ export type FileOperation =
   | "createDirectory"
   | "move"
   | "trash"
-  | "index";
+  | "index"
+  | "search";
 
 export type CodeEditorOptions = {
   wordWrap: boolean;
@@ -69,7 +74,16 @@ export type CodeEditorWebMessage =
   | { type: "openFile"; path: string; line: number; column: number }
   | { type: "lspStart"; server: string }
   | { type: "lsp"; server: string; json: string }
-  | { type: "fs"; id: number; op: FileOperation; path: string; content?: string; modified?: number; to?: string }
+  | {
+      type: "fs";
+      id: number;
+      op: FileOperation;
+      path: string;
+      content?: string;
+      modified?: number;
+      to?: string;
+      query?: string;
+    }
   | { type: "projectFiles"; open: string[]; active: string | null }
   | { type: "confirmClose"; id: number; name: string }
   | { type: "projectDirty"; dirty: boolean };

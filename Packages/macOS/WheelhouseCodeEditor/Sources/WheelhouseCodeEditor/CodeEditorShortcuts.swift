@@ -13,13 +13,37 @@ public enum CodeEditorShortcuts {
             && claimedCommandKeys.contains(characters.lowercased())
     }
 
+    /// What a folder tab handles besides: find a file (⌘P), search in files (⇧⌘F) and
+    /// save all (⌥⌘S).
+    static func claimsInProject(characters: String, modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        switch (modifierFlags.intersection([.command, .shift, .option, .control]), characters.lowercased()) {
+        case ([.command], "p"), ([.command, .shift], "f"), ([.command, .option], "s"): return true
+        default: return false
+        }
+    }
+
+    /// Whether the editor that has keyboard focus, if one has, handles this key itself.
+    @MainActor
+    public static func focusedEditorClaims(
+        characters: String, modifierFlags: NSEvent.ModifierFlags, firstResponder: NSResponder?
+    ) -> Bool {
+        guard let editor = focusedEditor(firstResponder: firstResponder) else { return false }
+        return claims(characters: characters, modifierFlags: modifierFlags)
+            || (editor.showsProject && claimsInProject(characters: characters, modifierFlags: modifierFlags))
+    }
+
     @MainActor
     public static func isEditorFocused(firstResponder: NSResponder?) -> Bool {
+        focusedEditor(firstResponder: firstResponder) != nil
+    }
+
+    @MainActor
+    private static func focusedEditor(firstResponder: NSResponder?) -> CodeEditorWebView? {
         var view = firstResponder as? NSView
         while let current = view {
-            if current is CodeEditorWebView { return true }
+            if let editor = current as? CodeEditorWebView { return editor }
             view = current.superview
         }
-        return false
+        return nil
     }
 }
