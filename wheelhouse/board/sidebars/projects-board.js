@@ -29,6 +29,8 @@ const CHIP = tone("#00000014", "#7f7f7f29");
 const CHIP_LINE = tone("#00000033", "#7f7f7f4d");
 const CHIP_HOVER = tone("#00000029", "#7f7f7f47");
 const ROW_HOVER = tone("#00000014", "#7f7f7f24");
+// Under a card while it is dragged, so the cards it passes do not show through.
+const LIFTED = tone("#E9E9EB", "#2A2A2C");
 
 // `proj` rewrites this line in the installed copy: a sidebar cannot read the project files.
 const BOARD = { projects: {}, kinds: [], browserProfile: "", proj: "", home: "" };
@@ -54,10 +56,29 @@ function rank(w) {
   return 3;
 }
 
+// The last card dropped on the board: until the workspace data has moved on from where the
+// card was picked up, the board counts it as already being where the drop sends it.
+let dropped = null;
+const [dropCount, setDropCount] = signal(0);
+
+const placed = computed(() => {
+  dropCount();
+  const all = workspaces();
+  if (!dropped) return all;
+  const at = all.findIndex((w) => w.id === dropped.id);
+  if (at !== dropped.at || all[at].group !== dropped.from) {
+    dropped = null;
+    return all;
+  }
+  const rest = all.filter((w) => w.id !== dropped.id);
+  rest.splice(dropped.place, 0, { ...all[at], group: dropped.group });
+  return rest.map((w, index) => ({ ...w, index }));
+});
+
 const cardsIn = (label) => () => {
   const g = laneGroup(label);
   if (!g) return [];
-  return workspaces()
+  return placed()
     .filter((w) => w.group === g.id && w.id !== g.anchorId)
     .sort((x, y) => rank(x) - rank(y) || x.index - y.index);
 };
@@ -361,6 +382,109 @@ function lane(label) {
   ]);
 }
 
+// In Wheelhouse IDE a card can be dragged to another lane, or to another place in its own.
+// For that the lanes are one list of lane names, cards and the mark of an empty lane.
+const CAN_DRAG = IN_WHEELHOUSE && typeof Reorderable === "function";
+
+const laneRows = computed(() => {
+  const rows = [];
+  for (const label of LANES) {
+    const cards = cardsIn(label)();
+    rows.push({ id: "lane:" + label, kind: "lane", label, count: cards.length });
+    for (const w of cards) rows.push({ id: w.id, kind: "card", label });
+    if (!cards.length) rows.push({ id: "empty:" + label, kind: "empty", label });
+  }
+  // The list keeps a dropped card where it was let go until its rows change, and a drop may
+  // change nothing: a card cannot be put above one that is waiting on you. This row changes
+  // with every drop.
+  rows.push({ id: "drop:" + dropCount(), kind: "end", label: "" });
+  return rows;
+});
+
+// The lane a card lands in when it is dropped at `index` of the list: the lane of the row
+// above it.
+const rowsWithout = (id) => laneRows().filter((row) => row.id !== id && row.kind !== "end");
+const laneAt = (rows, index) => rows[Math.min(index, rows.length) - 1]?.label ?? LANES[0];
+
+// The lane the card being dragged would land in, while it is another than its own.
+const [dragLane, setDragLane] = signal(null);
+
+function dragChanged(state) {
+  const from = state && laneRows().find((row) => row.id === state.id)?.label;
+  const to = state ? laneAt(rowsWithout(state.id), state.index) : null;
+  setDragLane(to && to !== from ? to : null);
+}
+
+function dropCard(id, index) {
+  const all = workspaces();
+  const at = all.findIndex((w) => w.id === id);
+  const rows = rowsWithout(id);
+  const label = laneAt(rows, index);
+  const g = laneGroup(label);
+  dropped = null;
+  if (at < 0 || !g) {
+    setDropCount(dropCount() + 1);
+    return;
+  }
+  const w = all[at];
+  const rest = all.filter((x) => x.id !== id);
+  // A lane lists the cards that wait on you first, so the place asked for is one among the
+  // cards that sort like this one: before the next of them below the drop, else after the
+  // last of them above it, else at the end of the lane.
+  const peer = (row) => {
+    const other = row?.kind === "card" && row.label === label ? rest.find((x) => x.id === row.id) : null;
+    return other && rank(other) === rank(w) ? other : null;
+  };
+  const below = rows.slice(index).map(peer).find(Boolean);
+  const above = rows.slice(0, index).reverse().map(peer).find(Boolean);
+  const place = below
+    ? rest.indexOf(below)
+    : above
+      ? rest.indexOf(above) + 1
+      : w.group === g.id
+        ? at
+        : rest.map((x) => x.group).lastIndexOf(g.id) + 1;
+  if (w.group !== g.id || place !== at) dropped = { id, at, from: w.group, group: g.id, place };
+  setDropCount(dropCount() + 1);
+  if (w.group !== g.id) moveTo(w, label);
+  if (w.group !== g.id || place !== at) cmux("workspace.reorder", { workspace_id: id, index: place });
+}
+
+function laneRow(row, first) {
+  const label = row().label;
+  if (row().kind === "lane") {
+    return HStack({ spacing: 6 }, [
+      Text(label.toUpperCase()).font(10).weight("semibold")
+        .color(() => (dragLane() === label ? OPEN : laneGroup(label) ? "secondary" : "tertiary")),
+      Spacer(),
+      Text(() => (row()?.count ? String(row().count) : "")).font(10).monospaced().color("tertiary"),
+    ]).paddingHorizontal(4).paddingTop(first ? 0 : 8).fixed();
+  }
+  if (row().kind === "end") return Text("").fixed();
+  if (row().kind === "empty") {
+    return Text(() => (laneGroup(label) ? "—" : CAN_MANAGE ? "missing · click to restore" : "not created · run proj init"))
+      .font(10).color("tertiary").paddingHorizontal(4)
+      .onTap(() => {
+        if (CAN_MANAGE && !laneGroup(label)) restoreLanes();
+      })
+      .fixed();
+  }
+  // A card keeps showing its workspace for the moment between its closing and its row going.
+  let last;
+  const id = row().id;
+  const w = () => (last = workspaces().find((x) => x.id === id) ?? last);
+  return card(w).dragBackground(LIFTED);
+}
+
+function lanes() {
+  if (!CAN_DRAG) return LANES.map(lane);
+  return [
+    Reorderable(
+      { items: laneRows, key: (row) => row.id, spacing: 4, onMove: dropCard, onDragChange: dragChanged },
+      (row) => laneRow(row, row().id === "lane:" + LANES[0])),
+  ];
+}
+
 function otherRow(w) {
   return HStack({ spacing: 6 }, [
     Circle({ size: 6 }).fill(() => statusColor(w())),
@@ -471,7 +595,7 @@ sidebar(() =>
       ...headerButtons(),
     ]).paddingHorizontal(4),
     ...emptyBoard(),
-    ...LANES.map(lane),
+    ...lanes(),
     ...closedSection(),
     VStack({ spacing: 2 }, [
       Text(() => (others().length ? "NOT ON THE BOARD" : ""))
