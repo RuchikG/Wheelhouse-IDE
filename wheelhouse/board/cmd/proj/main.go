@@ -449,25 +449,9 @@ func openRemoteWorkspace(cfg *config, m *Manifest, cwd string, lane group) (stri
 		return "", errors.New("remote project without a host: set host in the manifest or remote_host in config.yaml")
 	}
 	args := []string{"ssh", host, "--name", m.Name, "--no-focus"}
-	var steps []string
-	if len(m.Agents) > 0 && m.Agents[0].Command != "" {
-		dir := m.Agents[0].Dir
-		if dir == "" {
-			dir = cfg.remoteAgentDir
-		}
-		if dir == "" {
-			dir = cwd
-		}
-		// Unquoted so the remote shell expands a leading ~.
-		if dir != "" {
-			steps = append(steps, "cd "+dir)
-		}
-		steps = append(steps, m.Agents[0].Command)
-	} else if cwd != "" {
-		steps = append(steps, "cd "+cwd)
-	}
-	if len(steps) > 0 {
-		args = append(args, "--command", strings.Join(steps, " && "))
+	command, agent := remoteStartup(cfg, m, cwd)
+	if command != "" {
+		args = append(args, "--command", command)
 	}
 	if _, err := cmux(args...); err != nil {
 		return "", err
@@ -489,6 +473,11 @@ func openRemoteWorkspace(cfg *config, m *Manifest, cwd string, lane group) (stri
 	if ws == nil {
 		return "", fmt.Errorf("cmux ssh %s did not produce a workspace named %q", host, m.Name)
 	}
+	if agent != "" {
+		if _, err := cmux("send", "--workspace", ws.Ref, agent+"\n"); err != nil {
+			return "", err
+		}
+	}
 	if m.Summary != "" {
 		if _, err := cmux("workspace-action", "--workspace", ws.Ref, "--action", "set-description", "--description", m.Summary); err != nil {
 			return "", err
@@ -498,6 +487,25 @@ func openRemoteWorkspace(cfg *config, m *Manifest, cwd string, lane group) (stri
 		return "", err
 	}
 	return ws.Ref, nil
+}
+
+// remoteStartup returns the remote terminal's command and the agent to type into it. The
+// command ends in a login shell because the terminal closes when its command exits.
+func remoteStartup(cfg *config, m *Manifest, cwd string) (command, agent string) {
+	dir := cwd
+	if len(m.Agents) > 0 && m.Agents[0].Command != "" {
+		agent = m.Agents[0].Command
+		if d := m.Agents[0].Dir; d != "" {
+			dir = d
+		} else if cfg.remoteAgentDir != "" {
+			dir = cfg.remoteAgentDir
+		}
+	}
+	if dir == "" {
+		return "", agent
+	}
+	// Unquoted so the remote shell expands a leading ~.
+	return "cd " + dir + ` && exec "${SHELL:-/bin/sh}" -l`, agent
 }
 
 func cmdLane(all []*Manifest, args []string) error {
