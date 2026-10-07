@@ -40,6 +40,9 @@ Design:
 - **Click to jump.** Clicking a card selects the project's workspace, and goes straight to the
   agent that is waiting if there is one. Right-click moves the card to another lane or marks it
   read.
+- **Drag to move.** Drag a card to another lane, or to another place in its own; the name of the
+  lane it would land in is tinted while you drag, and Escape gives up. The lane is saved in the
+  project file. Cards that wait on you stay first in their lane wherever they are dropped.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip

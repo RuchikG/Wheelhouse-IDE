@@ -199,9 +199,10 @@ link otherwise.
 
 The board is one script for both. Wheelhouse IDE tells its sidebars that it is Wheelhouse IDE,
 and there the board also shows what needs the app: the **+** and the "No projects open" card
-(the New Project form), the **Closed** list, and a palette for each appearance (the board's
-colours are given as a light and a dark one, which only Wheelhouse IDE's sidebars understand).
-In stock cmux the board keeps one palette and projects are added with `proj new`.
+(the New Project form), the **Closed** list, dragging a card to another lane, the button that
+imports sign-ins, and a palette for each appearance (the board's colours are given as a light and
+a dark one, which only Wheelhouse IDE's sidebars understand). In stock cmux the board keeps one
+palette, cards change lane from their right-click menu and projects are added with `proj new`.
 
 ## Notes
 
