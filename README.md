@@ -77,7 +77,7 @@ sidebar, and an **Example Project** to look around in.
 </p>
 
 1. **Look around.** Click the Example Project card to jump into its workspace. The chips on the
-   card open its links as browser tabs; right-click the card to move it to another lane.
+   card open its links as browser tabs. Drag the card to another lane as the work moves on.
 2. **Add your project.** Click the **+** at the top of the board, give the project a name and
    pick its folder. It opens in its own workspace, in the lane you chose.
 
@@ -86,13 +86,19 @@ sidebar, and an **Example Project** to look around in.
    </p>
 
 3. **Open its code.** Click the curly-braces button at the top right of a pane and choose
-   "Open Folder…". The folder opens as a tab with its file tree.
+   "Open Folder…". The folder opens as a tab with its file tree. ⌘P finds a file by name and
+   ⇧⌘F searches inside the files.
 
    <p align="center">
      <img src="wheelhouse/docs/images/project-open.png" width="720" alt="The new project on the board in the Design lane, with its folder open as a tab next to its terminal">
    </p>
 
-That is all a local project needs. More in [Project board](wheelhouse/board/README.md).
+4. **Stay signed in.** Link tabs have their own cookies. Click the key button at the top of the
+   board to copy your sign-ins from Chrome or another browser, so the pages behind a sign-in
+   open as they do there. macOS asks once for access to the browser's key in your keychain.
+
+That is all a local project needs. More in [Project board](wheelhouse/board/README.md) and
+[Code editor](wheelhouse/docs/editor.md).
 
 ### Working on a remote host
 
