@@ -167,7 +167,7 @@ func ensureProfile(name string) error {
 	if _, err := cmux("browser", "profiles", "add", name); err != nil {
 		return err
 	}
-	fmt.Printf("browser profile %q created; sign in once in a project tab\n", name)
+	fmt.Printf("browser profile %q created; sign in once in a project tab, or copy your sign-ins from a browser: cmux browser import --to-profile %q\n", name, name)
 	return nil
 }
 

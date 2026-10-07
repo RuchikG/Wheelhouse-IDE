@@ -131,6 +131,18 @@ function openLink(w, link) {
   cmux("surface.action", { workspace_id: w.id, action: "rename", title: link.title });
 }
 
+// Copies the sign-ins of Chrome or another browser into the profile the link tabs use, with
+// the app's own import. Wheelhouse IDE only, like the rest of what is new on the board.
+const CAN_IMPORT_SIGN_INS = IN_WHEELHOUSE && HAS_CHIPS;
+function importSignIns() {
+  const params = { scope: "cookies" };
+  if (BOARD.browserProfile) {
+    params.to_profile = BOARD.browserProfile;
+    params.create_profile = "true";
+  }
+  cmux("browser.import.dialog", params);
+}
+
 function closeLink(w, link) {
   const tab = linkTab(w, link);
   if (tab?.surfaceId) cmux("surface.close", { surface_id: tab.surfaceId, workspace_id: w.id });
@@ -221,6 +233,7 @@ function linkChip(w, link) {
       Button(() => (isOpen() ? "Show tab" : "Open tab"), () => openLink(w(), link())),
       Button("Close tab", () => closeLink(w(), link())),
       Button("Open in default browser", () => openURL(link().url)),
+      ...(CAN_IMPORT_SIGN_INS ? [Button("Import sign-ins from a browser…", importSignIns)] : []),
       ...(BOARD.proj
         ? [
             Divider(),
@@ -430,15 +443,21 @@ function closedSection() {
   ];
 }
 
-function newProjectButton() {
-  if (!CAN_MANAGE) return [];
+function headerButton(icon, help, action) {
+  return Image(icon).font(12).color("secondary")
+    .paddingHorizontal(5).paddingVertical(4)
+    .cornerRadius(6)
+    .hoverBackground(CARD_HOVER)
+    .help(help)
+    .onTap(action);
+}
+
+function headerButtons() {
   return [
-    Image("plus").font(12).color("secondary")
-      .paddingHorizontal(5).paddingVertical(4)
-      .cornerRadius(6)
-      .hoverBackground(CARD_HOVER)
-      .help("New project")
-      .onTap(newProject),
+    ...(CAN_IMPORT_SIGN_INS
+      ? [headerButton("person.badge.key", "Import sign-ins from Chrome or another browser", importSignIns)]
+      : []),
+    ...(CAN_MANAGE ? [headerButton("plus", "New project", newProject)] : []),
   ];
 }
 
@@ -449,7 +468,7 @@ sidebar(() =>
       Spacer(),
       Text(() => (needsYou() ? needsYou() + " waiting on you" : ""))
         .font(10).weight("semibold").color(NEEDS),
-      ...newProjectButton(),
+      ...headerButtons(),
     ]).paddingHorizontal(4),
     ...emptyBoard(),
     ...LANES.map(lane),

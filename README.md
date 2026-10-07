@@ -35,6 +35,8 @@ DONE              —
 - **Project board.** A kanban board in the sidebar: one card per project, in lanes from Design to
   Done. A card shows its branch and pull request, how many agents are running and how many are
   waiting on you, and links to the project's documents. Click a card to jump into its workspace.
+  The links open in the app's browser, and one button copies your sign-ins from Chrome so that
+  they open signed in.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.

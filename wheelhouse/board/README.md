@@ -127,6 +127,14 @@ needed: in the pane of the project's other link tabs, or in a new pane on the ri
 one, using the `browser_profile` setting. A chip is tinted while its tab is open. The chip's
 right-click menu closes the tab or opens the page in your default browser.
 
+Link tabs have their own cookies, so a page that needs a sign-in asks for it again. In Wheelhouse
+IDE the key button at the top of the board (also in a chip's right-click menu) copies the sign-ins
+from Chrome or another browser on this Mac into the profile the link tabs use: pick the browser
+and its profile, then Import. For Chrome, macOS asks once for access to "Chrome Safe Storage" in
+your keychain, which holds the key Chrome encrypts its cookies with. Reload a tab that was already
+open. Sign-ins expire as they do in the browser; import again to refresh them. The same import is
+at View > Import Browser Data… and, from a terminal, `cmux browser import --from chrome`.
+
 To add, change or remove a link:
 
 - **On the board:** right-click the card, open **Links** and pick a kind. A field appears on the
