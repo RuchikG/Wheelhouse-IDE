@@ -100,15 +100,16 @@ sidebar, and an **Example Project** to look around in.
    card open its links as browser tabs. Drag the card to another lane as the work moves on.
 2. **Add your project.** Click the **+** at the top of the board, give the project a name and
    pick its folder. It opens in its own workspace, in the lane you chose.
+
+   <p align="center">
+     <img src="wheelhouse/docs/images/new-project.png" width="460" alt="The New Project form: name, folder, lane, summary and an optional command to start with">
+   </p>
+
    A project whose workspace you close stays on the board under **Closed**: click it to open it
    again, or right-click it and choose **Remove from board** when it is finished.
 
    <p align="center">
      <img src="wheelhouse/docs/images/remove-from-board.png" width="420" alt="The board with a project under Closed and its menu: Open, and Remove from board">
-   </p>
-
-   <p align="center">
-     <img src="wheelhouse/docs/images/new-project.png" width="460" alt="The New Project form: name, folder, lane, summary and an optional command to start with">
    </p>
 
 3. **Open its code.** Click the curly-braces button at the top right of a pane and choose
