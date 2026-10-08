@@ -104,6 +104,10 @@ sidebar, and an **Example Project** to look around in.
    again, or right-click it and choose **Remove from board** when it is finished.
 
    <p align="center">
+     <img src="wheelhouse/docs/images/remove-from-board.png" width="420" alt="The board with a project under Closed and its menu: Open, and Remove from board">
+   </p>
+
+   <p align="center">
      <img src="wheelhouse/docs/images/new-project.png" width="460" alt="The New Project form: name, folder, lane, summary and an optional command to start with">
    </p>
 
