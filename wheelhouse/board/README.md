@@ -61,6 +61,13 @@ for the settings the form does not ask about (see [Projects](#projects)).
 A project whose workspace you closed is listed under **Closed** at the bottom of the board in
 Wheelhouse IDE; click it to open it again. From a terminal that is `proj open <project>`.
 
+To take a closed project off the board, right-click it under **Closed** and choose **Remove from
+board**, or run `proj rm <project>`. Its file moves to `~/.config/wheelhouse/archive`, together
+with the record of its agent sessions (`<project>.sessions.json`), and nothing reads that
+folder. Worktrees stay where they are; run `proj wt rm <project>` first to remove them. To bring
+a project back, move its file into `projects` again, and its sessions file to
+`sessions/<project>.json`.
+
 The installed board is a copy of `sidebars/projects-board.js` with each project's links written
 into it, because a custom sidebar cannot read files. `proj open`, `proj adopt` and `proj link`
 rewrite it; run `proj sync` after editing a project file's links by hand, the settings, or the
@@ -88,6 +95,7 @@ proj adopt <project>       turn the workspace you are in into the project's work
 proj ls                    projects with their lane, workspace and checkouts
 proj lane <project> <design|dev|review|release|done>
 proj lane pull             copy lane moves made on the board back into the project files
+proj rm <project>          take a closed project off the board; its file moves to the archive
 proj link [<project>]      a project's links, one line per link kind
 proj link [<project>] <kind> <url>
                            set a project's link of that kind

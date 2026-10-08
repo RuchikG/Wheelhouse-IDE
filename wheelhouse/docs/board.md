@@ -114,7 +114,8 @@ Design:
   project with a folder of its own, so there is a card to click before you have made one.
 - **Projects are added from the board.** The + at the top opens a short form: a name and a
   folder, and optionally the lane, a summary and a command for the first terminal. A project
-  whose workspace was closed stays listed under Closed and opens again with a click.
+  whose workspace was closed stays listed under Closed and opens again with a click; Remove
+  from board in its menu takes it off for good and keeps its file in an archive folder.
 - **A project is one small file:** name, lane, summary, repositories with their branch, links
   for the card, and agents to start. The form writes it; edit it by hand for the rest. Opening
   a project creates its workspace in the right lane, starts the agents, and gives it its own git

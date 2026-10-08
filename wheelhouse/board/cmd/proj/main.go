@@ -26,6 +26,8 @@ const usage = `proj - project workspaces on cmux
                              turn an existing workspace (default: the current one) into the project's workspace
   proj lane <project> <lane> move a project to a lane (manifest and board)
   proj lane pull             copy lane moves made on the board back into the manifests
+  proj rm <project>          take a closed project off the board; its file and its session
+                             history move to <home>/archive
   proj link [<project>]      show a project's links, one per link kind
   proj link [<project>] <kind> <url>
                              set a project's link of that kind (the chip on its card)
@@ -92,6 +94,8 @@ func run(cmd string, args []string) error {
 		return cmdAdopt(cfg, all, args)
 	case "lane":
 		return cmdLane(all, args)
+	case "rm":
+		return cmdRemove(cfg, all, args)
 	case "link":
 		return cmdLink(cfg, all, args)
 	case "wt":

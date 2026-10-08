@@ -320,6 +320,10 @@ enum WheelhouseSessions {
             found[name] = file.deletingPathExtension().lastPathComponent
         }
         projects = found
+        // A project taken off the board takes its sessions along; a later one of the same
+        // name starts without them.
+        let kept = Set(found.values)
+        histories = histories.filter { kept.contains($0.key) }
     }
 
     private static func file(_ project: String) -> URL {

@@ -208,6 +208,7 @@ const newProject = () => wheelhouse.newProject();
 const addExample = () => runProj(["example"], "Adding the example", "The example was not added.");
 const restoreLanes = () => runProj(["init"], "Restoring lanes", "The lanes were not restored.");
 const openProject = (slug) => runProj(["open", slug, "--focus"], "Opening project", "The project was not opened.");
+const removeProject = (slug) => runProj(["rm", slug], "Removing project", "The project was not removed.");
 
 function saveLink(w, kind, address) {
   setEditing(null);
@@ -532,7 +533,8 @@ function emptyBoard() {
   ];
 }
 
-// Projects whose workspace was closed: a click opens them again.
+// Projects whose workspace was closed: a click opens them again, and the menu takes one off
+// the board for good.
 const closedProjects = computed(() => {
   const open = new Set(workspaces().map((w) => w.title));
   return Object.keys(BOARD.projects).filter((name) => !open.has(name)).sort()
@@ -550,7 +552,12 @@ function closedRow(p) {
     .hoverBackground(ROW_HOVER)
     .frame({ maxWidth: "infinity" })
     .help("Open this project")
-    .onTap(() => openProject(p().slug));
+    .onTap(() => openProject(p().slug))
+    .contextMenu([
+      Button("Open", () => openProject(p().slug)),
+      Divider(),
+      Button("Remove from board", () => removeProject(p().slug)),
+    ]);
 }
 
 function closedSection() {
