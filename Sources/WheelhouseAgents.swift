@@ -1,6 +1,11 @@
+import AppKit
 import CmuxSidebar
+import Combine
+import Darwin
 import CmuxSurfaceCatalogModel
+import CmuxWorkspaces
 import Foundation
+import SwiftUI
 
 /// The custom sidebars' `workspaces[i].agents` without stale sessions and with the agents on
 /// `cmux ssh` hosts.
@@ -37,12 +42,12 @@ enum WheelhouseRemoteAgents {
     }
 }
 
-/// The Agents panel: a custom sidebar that takes the right sidebar while the selected project
-/// has more than one agent, and narrows to a rail when collapsed.
+/// The Agents panel: a custom sidebar that takes the right sidebar while a project is selected,
+/// with the project's agents and its earlier sessions. Collapsed, it leaves an Agents button in
+/// the title bar that opens it again.
 @MainActor
 enum WheelhouseAgentsPanel {
     static let panelName = "project-agents"
-    static let railName = "project-agents-rail"
     private static let collapsedKey = "wheelhouse.agentsPanel.collapsed"
     private static let enabledKey = "wheelhouse.agentsPanel.enabled"
     private static let generatedHeader =
@@ -51,8 +56,6 @@ enum WheelhouseAgentsPanel {
     private static var timer: Timer?
     /// The workspace the open panel was last shown for.
     private static var shownFor: UUID?
-    /// Workspaces whose panel the user closed; it stays closed until they are down to one agent.
-    private static var dismissed: Set<UUID> = []
     private static var modeBefore: RightSidebarMode = .files
     private static var nameBefore: String?
 
@@ -61,82 +64,537 @@ enum WheelhouseAgentsPanel {
         _ = WheelhouseRemoteAgents.restoredBefore
         installScripts()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            MainActor.assumeIsolated { evaluate() }
+            MainActor.assumeIsolated {
+                WheelhouseSessions.tick()
+                evaluate()
+            }
         }
     }
 
-    /// The right sidebar's width while it shows the rail.
-    static func railWidth(_ state: FileExplorerState) -> CGFloat? {
-        state.mode == .customSidebar && state.customSidebarName == railName ? 44 : nil
+    /// Whether the right sidebar's mode is the panel. It then shows nothing else: the bar of
+    /// the other modes is left out.
+    static func isShowing(_ state: FileExplorerState) -> Bool {
+        state.mode == .customSidebar && state.customSidebarName == panelName
     }
 
     static func setCollapsed(_ collapsed: Bool) {
         UserDefaults.standard.set(collapsed, forKey: collapsedKey)
-        guard let state = AppDelegate.shared?.fileExplorerState, showsPanel(state) else { return }
-        state.selectCustomSidebar(name: collapsed ? railName : panelName)
+        if collapsed, let state = AppDelegate.shared?.fileExplorerState, showsPanel(state) {
+            hide(state, close: true)
+        }
+        evaluate()
     }
 
     private static func showsPanel(_ state: FileExplorerState) -> Bool {
-        state.isVisible && state.mode == .customSidebar
-            && [panelName, railName].contains(state.customSidebarName ?? "")
+        state.isVisible && isShowing(state)
+    }
+
+    private static func hide(_ state: FileExplorerState, close: Bool) {
+        if close { state.setVisible(false) }
+        if let nameBefore { state.selectCustomSidebar(name: nameBefore) }
+        state.mode = modeBefore
+        shownFor = nil
     }
 
     private static func evaluate() {
-        guard UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true,
+        let defaults = UserDefaults.standard
+        let button = WheelhouseAgentsButtonModel.shared
+        guard defaults.object(forKey: enabledKey) as? Bool ?? true,
               let app = AppDelegate.shared, let state = app.fileExplorerState,
-              let workspace = app.tabManager?.selectedWorkspace else { return }
-        let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: workspace.id, unreadCount: 0).agents
-        let count = WheelhouseAgentsPanelPolicy.agentCount(agents)
-        let showing = showsPanel(state)
-        if count < 2 {
-            dismissed.remove(workspace.id)
-        } else if !showing, shownFor == workspace.id {
-            dismissed.insert(workspace.id)
+              let workspace = app.tabManager?.selectedWorkspace else {
+            button.update(isVisible: false, waiting: 0, working: 0)
+            return
         }
-        shownFor = showing && count >= 2 ? workspace.id : nil
+        let isProject = WheelhouseSessions.project(of: workspace) != nil
+        let showing = showsPanel(state)
+        if isProject {
+            if showing {
+                defaults.set(false, forKey: collapsedKey)
+            } else if shownFor == workspace.id, !state.isVisible {
+                // The right sidebar was hidden with the panel up: the panel is collapsed.
+                defaults.set(true, forKey: collapsedKey)
+            }
+        }
+        let collapsed = defaults.bool(forKey: collapsedKey)
+        let shownBefore = shownFor != nil
+        shownFor = isProject && showing ? workspace.id : nil
 
         switch WheelhouseAgentsPanelPolicy.action(
-            agentCount: count, panelShowing: showing, sidebarVisible: state.isVisible,
-            dismissed: dismissed.contains(workspace.id)
+            isProject: isProject, panelShowing: showing, sidebarVisible: state.isVisible, collapsed: collapsed
         ) {
         case .none:
             break
         case .show:
             let mode = state.mode
             let name = state.customSidebarName
-            let collapsed = UserDefaults.standard.bool(forKey: collapsedKey)
             // The app's own command: a sidebar shown in another order of steps stays unlaid out.
-            guard case .ok = app.applyRightSidebarRemoteCommand(
-                .setCustomSidebar(name: collapsed ? railName : panelName, focus: false)
-            ) else { return }
+            guard case .ok = app.applyRightSidebarRemoteCommand(.setCustomSidebar(name: panelName, focus: false))
+            else { break }
             modeBefore = mode == .customSidebar ? modeBefore : mode
-            nameBefore = name == panelName || name == railName ? nameBefore : name
+            nameBefore = name == panelName ? nameBefore : name
             shownFor = workspace.id
         case .hide:
-            state.setVisible(false)
-            if let nameBefore { state.selectCustomSidebar(name: nameBefore) }
-            state.mode = modeBefore
+            // Opened by the user outside a project, the right sidebar stays open on what it showed before.
+            hide(state, close: shownBefore)
         }
+
+        guard isProject, collapsed, !state.isVisible else {
+            button.update(isVisible: false, waiting: 0, working: 0)
+            return
+        }
+        let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: workspace.id, unreadCount: 0).agents
+        button.update(
+            isVisible: true,
+            waiting: agents.filter { $0.status == "needs_input" }.count,
+            working: agents.filter { $0.status == "working" }.count)
     }
 
-    /// Writes the bundled panel script and its rail copy where custom sidebars are read from,
-    /// leaving alone a file of the same name that this app did not write.
+    /// Writes the bundled panel script where custom sidebars are read from, leaving alone a
+    /// file of the same name that this app did not write, and removes the rail copy that
+    /// earlier builds wrote.
     private static func installScripts() {
         guard let source = Bundle.main.resourceURL?.appendingPathComponent("sidebars/\(panelName).js"),
               let script = try? String(contentsOf: source, encoding: .utf8) else { return }
         let directory = CmuxExtensionSidebarSelection.customSidebarsDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let copies = [
-            panelName: script,
-            railName: script.replacingOccurrences(of: "const RAIL = false;", with: "const RAIL = true;"),
-        ]
-        for (name, body) in copies {
-            let url = directory.appendingPathComponent("\(name).js", isDirectory: false)
-            let text = generatedHeader + body
-            if let current = try? String(contentsOf: url, encoding: .utf8) {
-                guard current.hasPrefix(generatedHeader), current != text else { continue }
-            }
+        let url = directory.appendingPathComponent("\(panelName).js", isDirectory: false)
+        let text = generatedHeader + script
+        let current = try? String(contentsOf: url, encoding: .utf8)
+        if current == nil || (current?.hasPrefix(generatedHeader) == true && current != text) {
             try? text.write(to: url, atomically: true, encoding: .utf8)
         }
+        let rail = directory.appendingPathComponent("\(panelName)-rail.js", isDirectory: false)
+        if (try? String(contentsOf: rail, encoding: .utf8))?.hasPrefix(generatedHeader) == true {
+            try? FileManager.default.removeItem(at: rail)
+        }
+    }
+}
+
+/// What the title bar's Agents button shows: it is there while the selected project's panel
+/// is collapsed.
+@MainActor
+final class WheelhouseAgentsButtonModel: ObservableObject {
+    static let shared = WheelhouseAgentsButtonModel()
+
+    @Published private(set) var isVisible = false
+    @Published private(set) var waiting = 0
+    @Published private(set) var working = 0
+
+    func update(isVisible: Bool, waiting: Int, working: Int) {
+        if self.isVisible != isVisible { self.isVisible = isVisible }
+        if self.waiting != waiting { self.waiting = waiting }
+        if self.working != working { self.working = working }
+    }
+}
+
+/// Opens the collapsed Agents panel. Its dot is orange while an agent of the project waits on
+/// the user and blue while one works.
+struct WheelhouseAgentsButton: View {
+    @ObservedObject private var model = WheelhouseAgentsButtonModel.shared
+
+    var body: some View {
+        if model.isVisible {
+            Button {
+                WheelhouseAgentsPanel.setCollapsed(false)
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(model.waiting > 0 ? Color.orange : model.working > 0 ? Color.blue : Color.secondary.opacity(0.6))
+                        .frame(width: 7, height: 7)
+                    Text(String(localized: "wheelhouse.agentsButton.title", defaultValue: "Agents"))
+                        .font(.system(size: 12, weight: .medium))
+                    if model.waiting > 0 {
+                        Text(verbatim: String(model.waiting))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.08), in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "wheelhouse.agentsButton.help", defaultValue: "Show this project's agents and earlier sessions"))
+            .padding(.trailing, 10)
+        }
+    }
+}
+
+/// Every project's agent sessions, kept after they end: `<home>/sessions/<project>.json`, one
+/// file per project file. A session is whatever agent the app sees running in one of the
+/// project's terminals, so any harness the app can tell apart is recorded.
+@MainActor
+enum WheelhouseSessions {
+    /// How many earlier sessions a sidebar is given per project.
+    private static let listed = 30
+    private static let launchedAt = Date()
+
+    private static var ticks = 0
+    /// Project name → the project file's name without its extension.
+    private static var projects: [String: String] = [:]
+    private static var histories: [String: WheelhouseSessionHistory] = [:]
+
+    static var home: URL {
+        if let home = ProcessInfo.processInfo.environment["WHEELHOUSE_HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: (home as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/wheelhouse", isDirectory: true)
+    }
+
+    static func project(of workspace: Workspace) -> String? {
+        projects[workspace.customTitle ?? workspace.title]
+    }
+
+    static func list(for workspace: Workspace) -> WheelhouseSessionList {
+        guard let project = project(of: workspace) else { return .empty }
+        return WheelhouseSessionList(project: project, records: history(project).earlier(limit: listed))
+    }
+
+    static func tick() {
+        ticks += 1
+        if ticks % 5 == 1 {
+            readProjects()
+            WheelhouseHarnessScan.readHarnesses(home: home)
+        }
+        if ticks % 3 == 0 { record() }
+    }
+
+    /// Resumes a session in its project, or goes to it while it is running. With `copyLink`,
+    /// puts the session's link on the pasteboard instead.
+    @discardableResult
+    static func open(project: String, id: String, copyLink: Bool = false) -> Bool {
+        readProjects()
+        guard projects.values.contains(project), let record = history(project).record(id: id) else { return false }
+        if copyLink {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(WheelhouseSessionLink.string(project: project, id: id), forType: .string)
+            return true
+        }
+        if let workspace = workspace(of: project) {
+            show(record, in: workspace)
+            return true
+        }
+        Task { @MainActor in
+            _ = await WheelhouseProjects.run(["open", project], home: home.path)
+            if let workspace = workspace(of: project) { show(record, in: workspace) }
+        }
+        return true
+    }
+
+    static func open(_ url: URL) -> Bool {
+        guard let link = WheelhouseSessionLink.parse(url) else { return false }
+        NSApp.activate()
+        return open(project: link.project, id: link.id)
+    }
+
+    private static func workspace(of project: String) -> Workspace? {
+        AppDelegate.shared?.tabManager?.tabs.first { self.project(of: $0) == project }
+    }
+
+    private static func show(_ record: WheelhouseSessionRecord, in workspace: Workspace) {
+        AppDelegate.shared?.tabManager?.selectWorkspace(workspace)
+        if record.endedAt == nil {
+            let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: workspace.id, unreadCount: 0).agents
+            if let panel = agents.first(where: { $0.sessionId == record.sessionId })?.panelId {
+                workspace.focusPanel(panel)
+            }
+            return
+        }
+        guard record.host == nil, let resume = record.resume,
+              let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+        else { return }
+        var directory = record.directory
+        if let path = directory, !FileManager.default.fileExists(atPath: path) { directory = nil }
+        _ = workspace.newTerminalSurface(inPane: pane, focus: true, workingDirectory: directory, initialInput: resume + "\n")
+    }
+
+    private static func readProjects() {
+        let folder = home.appendingPathComponent("projects", isDirectory: true)
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        var found: [String: String] = [:]
+        for file in files where file.pathExtension == "yaml" && !file.lastPathComponent.hasPrefix("_") {
+            guard let text = try? String(contentsOf: file, encoding: .utf8),
+                  let name = WheelhouseProjectFile.name(in: text) else { continue }
+            found[name] = file.deletingPathExtension().lastPathComponent
+        }
+        projects = found
+    }
+
+    private static func file(_ project: String) -> URL {
+        home.appendingPathComponent("sessions", isDirectory: true).appendingPathComponent("\(project).json")
+    }
+
+    private static func history(_ project: String) -> WheelhouseSessionHistory {
+        if let history = histories[project] { return history }
+        let history = (try? Data(contentsOf: file(project))).map(WheelhouseSessionHistory.init(data:))
+            ?? WheelhouseSessionHistory()
+        histories[project] = history
+        return history
+    }
+
+    private static func record() {
+        guard !projects.isEmpty, let manager = AppDelegate.shared?.tabManager else { return }
+        let now = Date()
+        let index = SharedLiveAgentIndex.shared.currentIndexSchedulingRefresh()
+        // Sessions restored at launch take a moment to show up again.
+        let complete = now.timeIntervalSince(launchedAt) > 20
+        var live: [String: [WheelhouseSessionObservation]] = [:]
+        for workspace in manager.tabs {
+            guard let project = project(of: workspace) else { continue }
+            live[project, default: []] += observations(in: workspace, index: index)
+        }
+        for project in Set(projects.values) {
+            var history = history(project)
+            guard history.observe(live[project] ?? [], now: now.timeIntervalSince1970, complete: complete) else {
+                histories[project] = history
+                continue
+            }
+            histories[project] = history
+            let url = file(project)
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? history.encoded().write(to: url, options: .atomic)
+        }
+    }
+
+    private static func observations(in workspace: Workspace, index: RestorableAgentSessionIndex?) -> [WheelhouseSessionObservation] {
+        let host = workspace.remoteDisplayTarget
+        var found: [WheelhouseSessionObservation] = []
+        var position: [String: Int] = [:]
+        let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: nil, unreadCount: 0).agents
+        for agent in agents where agent.status != "ended" && !agent.sessionId.hasPrefix("pending-") {
+            if agent.sessionId.hasPrefix("remote:") {
+                found.append(WheelhouseSessionObservation(
+                    id: agent.sessionId, kind: agent.kind, name: agent.name, title: agent.title, host: host))
+                continue
+            }
+            let indexed = agent.panelId
+                .flatMap { index?.entry(workspaceId: workspace.id, panelId: $0)?.snapshot }
+                .flatMap { $0.sessionId == agent.sessionId ? $0 : nil }
+            let harness = WheelhouseHarnessScan.harness(id: agent.kind)
+            position[agent.sessionId] = found.count
+            found.append(WheelhouseSessionObservation(
+                id: agent.sessionId, kind: agent.kind,
+                name: harness?.name ?? indexed?.registration?.name ?? indexed?.kind.displayName ?? agent.name,
+                sessionId: agent.sessionId,
+                title: agent.title ?? WheelhouseHarnessScan.title(transcript: agent.transcriptPath, session: agent.sessionId),
+                host: host, directory: agent.workingDirectory ?? indexed?.workingDirectory,
+                resume: host != nil ? nil : harness?.resumeCommand(id: agent.sessionId)
+                    ?? resumeCommand(kind: agent.kind, sessionId: agent.sessionId, registration: indexed?.registration)))
+        }
+        guard host == nil else { return found }
+        var terminals: [UUID] = []
+        for pane in workspace.bonsplitController.allPaneIds {
+            for tab in workspace.bonsplitController.tabs(inPane: pane) {
+                if let panel = workspace.panelIdFromSurfaceId(tab.id) { terminals.append(panel) }
+            }
+        }
+        // What the terminals' own processes say: any listed harness, and under which launcher.
+        for panel in terminals {
+            guard let tty = workspace.surfaceTTYNames[panel] else { continue }
+            for session in WheelhouseHarnessScan.sessions(onTTY: tty) {
+                let seen = position[session.id].map { found[$0] }
+                let observation = WheelhouseSessionObservation(
+                    id: session.id, kind: session.harness.id, name: session.harness.name, sessionId: session.id,
+                    title: seen?.title ?? session.title, directory: seen?.directory ?? session.directory,
+                    resume: session.harness.resumeCommand(id: session.id) ?? seen?.resume)
+                if let index = position[session.id] {
+                    found[index] = observation
+                } else {
+                    position[session.id] = found.count
+                    found.append(observation)
+                }
+            }
+        }
+        // Agents only cmux can tell apart.
+        guard let index else { return found }
+        for panel in terminals {
+            guard let entry = index.exactEntry(workspaceId: workspace.id, panelId: panel),
+                  entry.processLiveness == .running, position[entry.snapshot.sessionId] == nil else { continue }
+            let snapshot = entry.snapshot
+            position[snapshot.sessionId] = found.count
+            found.append(WheelhouseSessionObservation(
+                id: snapshot.sessionId, kind: snapshot.kind.rawValue,
+                name: snapshot.registration?.name ?? snapshot.kind.displayName, sessionId: snapshot.sessionId,
+                directory: snapshot.workingDirectory,
+                resume: resumeCommand(
+                    kind: snapshot.kind.rawValue, sessionId: snapshot.sessionId, registration: snapshot.registration)))
+        }
+        return found
+    }
+
+    /// The harness's own way back into a session, from its kind and session id alone: the
+    /// command line an agent was started with can hold credentials and is never kept.
+    private static func resumeCommand(kind: String, sessionId: String, registration: CmuxVaultAgentRegistration?) -> String? {
+        guard let kind = RestorableAgentKind(rawValue: kind) else { return nil }
+        return SessionRestorableAgentSnapshot(
+            kind: kind, sessionId: sessionId, workingDirectory: nil, launchCommand: nil, registration: registration
+        ).resumeCommand(includeWorkingDirectoryPrefix: false)
+    }
+}
+
+/// The agent sessions of a terminal, found from its processes and the harness list
+/// (`WheelhouseHarness.builtIn` and `<home>/harnesses.json`).
+@MainActor
+enum WheelhouseHarnessScan {
+    struct Session {
+        let id: String
+        let harness: WheelhouseHarness
+        let directory: String?
+        let title: String?
+    }
+
+    private struct Known {
+        var id: String?
+        var file: String?
+        var title: String?
+        var lookedAt = Date.distantPast
+    }
+
+    private static var harnesses = WheelhouseHarness.builtIn
+    /// What was found out about a running agent, by process id and start time.
+    private static var known: [String: Known] = [:]
+    private static var titles: [String: String] = [:]
+
+    static func readHarnesses(home: URL) {
+        harnesses = WheelhouseHarness.all(userList: try? Data(contentsOf: home.appendingPathComponent("harnesses.json")))
+    }
+
+    static func harness(id: String) -> WheelhouseHarness? {
+        harnesses.first { $0.id == id }
+    }
+
+    static func sessions(onTTY tty: String) -> [Session] {
+        let agents = WheelhouseHarnessMatch.agents(in: processes(onTTY: tty), harnesses: harnesses)
+        return agents.compactMap { agent in
+            let key = "\(agent.process.pid)@\(Int(agent.process.startedAt))"
+            var entry = known[key] ?? Known()
+            // Looking a session up reads files, so it is not done on every pass.
+            if entry.id == nil || entry.title == nil, Date().timeIntervalSince(entry.lookedAt) > 8 {
+                entry.lookedAt = Date()
+                look(up: agent, into: &entry)
+                if known.count > 256 { known.removeAll() }
+                known[key] = entry
+            }
+            guard let id = entry.id else { return nil }
+            return Session(id: id, harness: agent.harness, directory: agent.process.directory, title: entry.title)
+        }
+    }
+
+    /// A session's first prompt from its transcript, read once it is there.
+    static func title(transcript path: String?, session: String) -> String? {
+        if let title = titles[session] { return title }
+        guard let path, let title = firstPrompt(inFile: path) else { return nil }
+        if titles.count > 512 { titles.removeAll() }
+        titles[session] = title
+        return title
+    }
+
+    private static func look(up agent: WheelhouseHarnessAgent, into entry: inout Known) {
+        let program = agent.program
+        let process = agent.process
+        if entry.id == nil, let template = program.pidFile {
+            let path = expand(template.replacingOccurrences(of: "{pid}", with: String(process.pid)))
+            if let data = FileManager.default.contents(atPath: path),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                entry.id = object["sessionId"] as? String
+            }
+        }
+        if entry.id == nil, let folder = program.sessionFiles, let directory = process.directory,
+           let file = sessionFile(in: expand(folder), since: process.startedAt, directory: directory) {
+            entry.id = WheelhouseHarness.sessionId(inFileName: (file as NSString).lastPathComponent)
+            entry.file = file
+        }
+        guard entry.title == nil, let id = entry.id else { return }
+        let transcript = entry.file
+            ?? process.directory.flatMap { program.transcriptPath(id: id, directory: $0) }.map(expand)
+        entry.title = transcript.flatMap(firstPrompt(inFile:))
+    }
+
+    /// The newest session file written since the agent started that names the agent's folder.
+    private static func sessionFile(in folder: String, since start: Double, directory: String) -> String? {
+        let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
+        guard let files = FileManager.default.enumerator(
+            at: URL(fileURLWithPath: folder, isDirectory: true), includingPropertiesForKeys: keys
+        ) else { return nil }
+        var best: (path: String, created: Date)?
+        for case let file as URL in files where ["jsonl", "json"].contains(file.pathExtension) {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
+                  let created = values.creationDate, created.timeIntervalSince1970 >= start - 2,
+                  created > best?.created ?? .distantPast,
+                  WheelhouseHarness.sessionId(inFileName: file.lastPathComponent) != nil,
+                  let head = head(ofFile: file.path, bytes: 64 * 1024),
+                  WheelhouseTranscript.sessionFileHead(head, isIn: directory) else { continue }
+            best = (file.path, created)
+        }
+        return best?.path
+    }
+
+    private static func firstPrompt(inFile path: String) -> String? {
+        guard let text = head(ofFile: path, bytes: 1024 * 1024) else { return nil }
+        return WheelhouseTranscript.firstPrompt(inLines: text.split(whereSeparator: \.isNewline))
+    }
+
+    private static func head(ofFile path: String, bytes: Int) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: bytes) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func expand(_ path: String) -> String {
+        (path as NSString).expandingTildeInPath
+    }
+
+    private static func processes(onTTY tty: String) -> [WheelhouseProcess] {
+        var device = stat()
+        guard stat("/dev/" + tty, &device) == 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: 512)
+        let bytes = proc_listpids(
+            UInt32(PROC_TTY_ONLY), UInt32(bitPattern: device.st_rdev), &pids,
+            Int32(pids.count * MemoryLayout<pid_t>.size))
+        guard bytes > 0 else { return [] }
+        return pids.prefix(Int(bytes) / MemoryLayout<pid_t>.size).filter { $0 > 0 }.compactMap(process)
+    }
+
+    private static func process(_ pid: pid_t) -> WheelhouseProcess? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let name = proc_pidpath(pid, &path, UInt32(path.count)) > 0
+            ? (String(cString: path) as NSString).lastPathComponent
+            : withUnsafeBytes(of: &info.pbi_comm) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        var vnode = proc_vnodepathinfo()
+        var directory: String?
+        if proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &vnode, Int32(MemoryLayout<proc_vnodepathinfo>.size)) > 0 {
+            directory = withUnsafeBytes(of: &vnode.pvi_cdir.vip_path) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        }
+        return WheelhouseProcess(
+            pid: Int(pid), parent: Int(info.pbi_ppid), name: name, arguments: commandLineStart(pid),
+            startedAt: Double(info.pbi_start_tvsec), directory: directory?.isEmpty == false ? directory : nil)
+    }
+
+    /// The name a process was called by and its first argument. The rest of a command line
+    /// can hold credentials and is not read out.
+    private static func commandLineStart(_ pid: pid_t) -> [String] {
+        var name: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&name, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return [] }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&name, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return [] }
+        let count = Int(buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
+        var index = MemoryLayout<Int32>.size
+        while index < size, buffer[index] != 0 { index += 1 }
+        while index < size, buffer[index] == 0 { index += 1 }
+        var arguments: [String] = []
+        while arguments.count < min(count, 2), index < size {
+            let start = index
+            while index < size, buffer[index] != 0 { index += 1 }
+            arguments.append(String(decoding: buffer[start..<index], as: UTF8.self))
+            index += 1
+        }
+        return arguments
     }
 }

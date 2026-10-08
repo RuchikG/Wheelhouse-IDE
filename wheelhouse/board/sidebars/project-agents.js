@@ -1,9 +1,7 @@
 // project-agents: the agents of the selected project, with what each is doing and its
-// sub-agents. Wheelhouse IDE shows it in the right sidebar while a project has more than one
-// agent, and as a narrow rail when collapsed.
-
-// Wheelhouse IDE installs a second copy with this set, which draws the rail.
-const RAIL = false;
+// sub-agents, and under them the project's earlier sessions, each with a way back into it.
+// Wheelhouse IDE shows it in the right sidebar while a project is selected; collapsed, it
+// leaves an Agents button in the title bar.
 
 const IN_WHEELHOUSE = typeof wheelhouse === "object";
 const tone = (light, dark) => (IN_WHEELHOUSE ? light + "|" + dark : dark);
@@ -56,6 +54,38 @@ function jump(e) {
   cmux("workspace.select", { workspace_id: e.w.id });
   if (e.a.surfaceId) cmux("surface.focus", { surface_id: e.a.surfaceId, workspace_id: e.w.id });
 }
+
+// Earlier sessions come from Wheelhouse IDE, the latest first; cmux itself lists none.
+const sessions = computed(() => project()?.sessions ?? []);
+const CAN_OPEN_SESSIONS = IN_WHEELHOUSE && typeof wheelhouse.session === "function";
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const two = (n) => (n < 10 ? "0" + n : String(n));
+const dayNumber = (d) => Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000);
+
+// "Today 14:05", "Yesterday 17:31", "Mon 5 Oct 15:48".
+function startedAt(epoch) {
+  if (!epoch) return "";
+  const d = new Date(epoch * 1000);
+  const time = two(d.getHours()) + ":" + two(d.getMinutes());
+  const now = data.clock()?.epoch;
+  const ago = now ? dayNumber(new Date(now * 1000)) - dayNumber(d) : -1;
+  if (ago === 0) return "Today " + time;
+  if (ago === 1) return "Yesterday " + time;
+  return DAYS[d.getDay()] + " " + d.getDate() + " " + MONTHS[d.getMonth()] + " " + time;
+}
+
+function lasted(s) {
+  if (!s.startedEpoch || !s.endedEpoch) return "";
+  const m = Math.floor(Math.max(0, s.endedEpoch - s.startedEpoch) / 60);
+  if (m < 1) return "under a minute";
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+}
+
+const sessionMeta = (s) =>
+  [startedAt(s.startedEpoch), lasted(s), s.host || "this Mac"].filter(Boolean).join(" · ");
 
 const setCollapsed = (collapsed) => {
   if (IN_WHEELHOUSE && typeof wheelhouse.agentsPanel === "function") wheelhouse.agentsPanel({ collapsed });
@@ -116,39 +146,69 @@ function iconButton(icon, help, action) {
     .onTap(action);
 }
 
+function sessionRow(s) {
+  const resumable = () => CAN_OPEN_SESSIONS && Boolean(s()?.canResume);
+  return HStack({ spacing: 6 }, [
+    VStack({ spacing: 3 }, [
+      HStack({ spacing: 6 }, [
+        Text(() => s()?.name || s()?.kind || "Agent").font(10).weight("semibold").color("secondary")
+          .lineLimit(1)
+          .paddingHorizontal(5).paddingVertical(1)
+          .background(CARD_HOVER).cornerRadius(4)
+          .layoutPriority(2),
+        Text(() => s()?.title || "No prompt recorded").font(11)
+          .color(() => (s()?.title ? "primary" : "tertiary")).lineLimit(1).truncation("tail"),
+        Spacer({ minLength: 0 }),
+      ]),
+      line(Text(() => sessionMeta(s() ?? {})).font(10).color("tertiary").lineLimit(1).truncation("tail")),
+    ]).frame({ maxWidth: "infinity" }),
+    when(resumable, "resume", () =>
+      Text("Resume").font(11).weight("semibold").color(WORKING).lineLimit(1)
+        .paddingHorizontal(8).paddingVertical(4)
+        .cornerRadius(6)
+        .background(CARD)
+        .hoverBackground(CARD_HOVER)
+        .help("Open this session again in a new tab")
+        .onTap(() => wheelhouse.session(s()))),
+    when(() => CAN_OPEN_SESSIONS, "link", () =>
+      iconButton("link", "Copy this session's link", () => wheelhouse.session(s(), { copyLink: true }))),
+  ])
+    .paddingHorizontal(10).paddingVertical(7)
+    .cornerRadius(8)
+    .background(CARD)
+    .frame({ maxWidth: "infinity" });
+}
+
+function earlierSessions() {
+  return [
+    HStack({ spacing: 6 }, [
+      Text("Earlier sessions").font(14).weight("semibold"),
+      Text(() => (sessions().length ? String(sessions().length) : "")).font(12).color("secondary"),
+      Spacer(),
+    ]).paddingHorizontal(4).paddingTop(10),
+    ForEach({ items: sessions, key: (s) => s.id }, (s) => sessionRow(s)),
+    when(() => sessions().length === 0, "none", () =>
+      line(Text("Sessions that end in this project are listed here.").font(11).color("tertiary"))
+        .paddingHorizontal(4)),
+  ];
+}
+
 function panel() {
   return VStack({ spacing: 8 }, [
     HStack({ spacing: 6 }, [
       Text("Agents").font(14).weight("semibold"),
       Text(() => (agents().length ? String(agents().length) : "")).font(12).color("secondary"),
       Spacer(),
-      ...(IN_WHEELHOUSE ? [iconButton("sidebar.right", "Collapse to a rail", () => setCollapsed(true))] : []),
+      ...(IN_WHEELHOUSE ? [iconButton("sidebar.right", "Collapse to the Agents button", () => setCollapsed(true))] : []),
     ]).paddingHorizontal(4),
     line(Text(() => project()?.title ?? "").font(11).color("secondary").lineLimit(1).truncation("tail"))
       .paddingHorizontal(4),
     ForEach({ items: agents, key: (e) => e.key }, (e) => agentCard(e)),
     when(() => agents().length === 0, "none", () =>
-      line(Text("No agents in this project.").font(11).color("tertiary")).paddingHorizontal(4)),
+      line(Text("No agent is running in this project.").font(11).color("tertiary")).paddingHorizontal(4)),
+    ...(IN_WHEELHOUSE ? earlierSessions() : []),
     Spacer(),
-  ]).paddingHorizontal(8);
+  ]).paddingHorizontal(8).paddingVertical(8);
 }
 
-function railDot(e) {
-  return Circle({ size: 9 }).fill(() => (STATE[e().a.status] ?? STATE.idle).color)
-    .padding(6)
-    .cornerRadius(6)
-    .background(() => (e().a.status === "needs_input" ? NEEDS_CARD : null))
-    .hoverBackground(CARD_HOVER)
-    .help(() => agentName(e()))
-    .onTap(() => jump(e()));
-}
-
-function rail() {
-  return VStack({ spacing: 4 }, [
-    iconButton("sidebar.right", "Show the agents", () => setCollapsed(false)),
-    ForEach({ items: agents, key: (e) => e.key }, (e) => railDot(e)),
-    Spacer(),
-  ]).frame({ maxWidth: "infinity" });
-}
-
-sidebar(() => (RAIL ? rail() : panel()), { surface: "glass" })
+sidebar(() => panel(), { surface: "glass" })

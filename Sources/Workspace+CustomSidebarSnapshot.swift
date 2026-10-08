@@ -47,7 +47,8 @@ extension Workspace {
             remote: remote,
             agents: WheelhouseRemoteAgents.merging(customSidebarAgentSnapshots(), in: self),
             groupId: groupId,
-            taskStatus: effectiveTaskStatus.rawValue
+            taskStatus: effectiveTaskStatus.rawValue,
+            sessions: WheelhouseSessions.list(for: self)
         )
     }
 

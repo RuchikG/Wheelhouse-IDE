@@ -118,10 +118,15 @@ set-up and the Agents panel), the `wheelhouse.project.new` and `wheelhouse.proj.
 sidebar knows it runs in this app and has it run `proj`, and `light|dark` colour pairs in `RenderStyle.swift`.
 The Agents panel (`Sources/WheelhouseAgents.swift`) adds the `wheelhouse.agents_panel.set` socket
 method, one line each in `Sources/ContentView.swift` and `Sources/RightSidebarPanelView.swift` for
-the rail's width and its hidden mode bar, and two lines that put agents on SSH hosts into a
+the title bar's Agents button and the mode bar left out while the panel is up, and two lines that put agents on SSH hosts into a
 sidebar's `agents` and take out sessions that are no longer running, such as the ones restored
 at launch (`Sources/RemoteTui/SSHTuiAgentStatusProjector.swift`,
-`Sources/Workspace+CustomSidebarSnapshot.swift`). Two
+`Sources/Workspace+CustomSidebarSnapshot.swift`). Session history, in the same file, adds the
+`wheelhouse.session.open` socket method, a `sessions` list on a sidebar's workspaces (one field
+in `CustomSidebarWorkspaceSnapshot`, two lines in `CustomSidebarDataContextBuilder`, one in
+`Sources/Workspace+CustomSidebarSnapshot.swift`), the `wheelhouse` URL scheme in
+`Resources/Info.plist` and one line in `Sources/AppDelegate+CmuxSSHURL.swift` that hands
+`wheelhouse://session/…` links to it. Two
 additions keep `claude` working in the app's terminals when it is installed as a shell alias
 or outside the `PATH` (`Resources/shell-integration/cmux-zsh-integration.zsh`,
 `Resources/bin/cmux-claude-wrapper`). The tab right-click menu is built by the Bonsplit submodule, which

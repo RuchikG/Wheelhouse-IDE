@@ -195,6 +195,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>$(CMUX_AUTH_CALLBACK_SCHEME)</string>
+				<string>wheelhouse</string>
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Default</string>

@@ -50,13 +50,51 @@ Design:
   agent. An agent that has finished its turn moves to Needs you after about a minute, when its
   idle reminder fires. The switch carries the number
   of agents waiting on you.
-- **Agents panel.** While the selected project has more than one agent (sub-agents count), a
-  panel on the right lists them with their state, task, sub-agents and folder. The button at
-  its top collapses it to a rail of one dot per agent, and the same button on the rail opens it
-  again. It goes away when the project is back to one agent, never replaces another right
-  sidebar that is open, and stays closed for a project once you close it there. This part
-  needs Wheelhouse IDE; `defaults write <bundle id> wheelhouse.agentsPanel.enabled -bool false`
-  turns it off.
+- **Agents panel.** While a project is selected, a panel on the right lists its agents with
+  their state, task, sub-agents and folder, and under them the project's earlier sessions. It
+  shows nothing else: the bar with the right sidebar's other modes is left out while it is up,
+  and those stay reachable by their shortcuts. The button at its top, or hiding the right
+  sidebar (View > Toggle Right Sidebar), collapses it to an **Agents** button at the right end
+  of the title bar, whose dot is orange while an agent of the project waits on you and blue
+  while one works; the button opens the panel again. The panel goes away when you select a
+  workspace that is not a project and never replaces another right sidebar that is open. This
+  part needs Wheelhouse IDE; `defaults write <bundle id> wheelhouse.agentsPanel.enabled -bool
+  false` turns it off.
+- **Session history.** Wheelhouse IDE keeps a record of every agent session started in a
+  project's terminals: the harness, the session's id, its first prompt, the folder, when it
+  started and when it ended. Sub-agents are not separate records, and a session that is resumed
+  stays the same record. The records are in `<home>/sessions/<project>.json`, next to the
+  project files, at most 500 ended sessions per project. In the panel an earlier session shows
+  its harness, first prompt, start time and length. **Resume** opens a new tab in the project
+  and types the harness's resume command there; the link button copies
+  `wheelhouse://session/<project>/<session>`, which opens the project and resumes that session
+  from anywhere on the Mac (`open wheelhouse://…`), or goes to its tab while it still runs.
+  Sessions on SSH hosts are listed with the host's name and without Resume: the host reports
+  that an agent runs, not which session.
+
+  Which sessions are recorded depends on what the app can tell apart in a terminal. Claude Code
+  and Codex are built in, as is every agent cmux itself recognises. Any other harness is
+  described in `<home>/harnesses.json`, a list in which an entry with the id of a built-in one
+  replaces it:
+
+  ```json
+  [
+    {"id": "mycli", "name": "My CLI", "process": ["mycli"],
+     "sessionFiles": "~/.mycli/sessions", "resume": "mycli resume {id}"},
+    {"id": "kit", "name": "Kit", "launcher": ["kit"], "wraps": "claude",
+     "resume": "kit claude --resume {id}"}
+  ]
+  ```
+
+  `process` names the agent's program. Its session id comes from `pidFile`, a JSON file with
+  `{pid}` in its path and the id under `sessionId` (Claude Code:
+  `~/.claude/sessions/{pid}.json`), or from `sessionFiles`, a folder where the agent writes one
+  JSON-lines file per session, named with the id last and naming the agent's folder as `cwd`
+  in its first line (Codex: `~/.codex/sessions`). `transcript` is where the first prompt is
+  read when there is no session file. An entry with `launcher` and `wraps` is a tool that
+  starts another harness: a session started through it carries its name and is resumed with
+  its command. Only the name a process was called by and its first argument are looked at,
+  and nothing of a command line is stored.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip

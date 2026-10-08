@@ -1848,7 +1848,7 @@ struct ContentView: View {
     }
 
     private var rightSidebarWidth: CGFloat {
-        rightSidebarVisible ? WheelhouseAgentsPanel.railWidth(fileExplorerState) ?? fileExplorerWidth : 0
+        rightSidebarVisible ? fileExplorerWidth : 0
     }
 
     private func sidebarBackdropLayer(
@@ -2191,6 +2191,7 @@ struct ContentView: View {
                         .padding(.leading, placement.leadingPadding)
                 }
             }
+            .overlay(alignment: .trailing) { WheelhouseAgentsButton() }
     }
 
     private func syncTrafficLightInset(isMinimalMode: Bool? = nil) {

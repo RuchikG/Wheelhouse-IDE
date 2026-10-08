@@ -137,6 +137,9 @@ public struct CustomSidebarDataContextBuilder {
         if !workspace.agents.isEmpty {
             fields["agents"] = .array(workspace.agents.map(agentValue(_:)))
         }
+        if !workspace.sessions.records.isEmpty {
+            fields["sessions"] = .array(workspace.sessions.values)
+        }
         return .object(fields)
     }
 

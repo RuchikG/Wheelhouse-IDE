@@ -281,6 +281,7 @@ extension TerminalController {
             "wheelhouse.project.new",
             "wheelhouse.proj.run",
             "wheelhouse.agents_panel.set",
+            "wheelhouse.session.open",
             "feedback.open",
             "feedback.submit",
             "feed.push",

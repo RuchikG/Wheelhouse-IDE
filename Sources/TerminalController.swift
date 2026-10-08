@@ -3141,6 +3141,13 @@ class TerminalController {
             }
             WheelhouseAgentsPanel.setCollapsed(collapsed)
             return v2Ok(id: id, result: ["collapsed": collapsed])
+        case "wheelhouse.session.open":
+            guard let project = params["project"] as? String, let session = params["id"] as? String,
+                  WheelhouseSessions.open(project: project, id: session, copyLink: v2Bool(params, "copy_link") ?? false)
+            else {
+                return v2Error(id: id, code: "not_found", message: "no such session in that project")
+            }
+            return v2Ok(id: id, result: ["project": project, "id": session])
         case "workspace.cloud_vm_terminal_ready":
             return v2Result(id: id, self.v2WorkspaceCloudVMTerminalReady(params: params))
         case "workspace.cloud_vm_bind":

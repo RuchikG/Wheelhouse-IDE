@@ -439,6 +439,7 @@ extension AppDelegate {
 
     @discardableResult
     func handleCmuxExternalURLs(from urls: [URL]) -> Bool {
+        if urls.count == 1, WheelhouseSessions.open(urls[0]) { return true }
         let intentCounts = cmuxExternalURLIntentCounts(in: urls)
         guard intentCounts.total > 0 else { return false }
         guard intentCounts.total == 1 else {

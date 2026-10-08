@@ -5,9 +5,10 @@ and opens projects. Both use only cmux's own extension points (custom sidebars, 
 the CLI), so they work with this fork and with stock cmux.
 
 - `sidebars/projects-board.js`: the board. Lanes are workspace groups; a card is a workspace.
-- `sidebars/project-agents.js`: the agents of the selected project. Wheelhouse IDE installs it
-  and shows it on the right while a project has more than one agent; in cmux, copy it to
-  `~/.config/cmux/sidebars/` and run `cmux right-sidebar set custom project-agents`.
+- `sidebars/project-agents.js`: the agents of the selected project and, in Wheelhouse IDE, its
+  earlier sessions. Wheelhouse IDE installs it and shows it on the right while a project is
+  selected; in cmux, copy it to `~/.config/cmux/sidebars/` and run
+  `cmux right-sidebar set custom project-agents`.
 - `cmd/proj`: creates the lane groups, adds projects, opens a project as a workspace in its lane
   with its worktrees and agents, writes the projects' links into the board, and keeps lanes and
   project files in sync.

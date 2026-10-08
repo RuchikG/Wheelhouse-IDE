@@ -96,6 +96,8 @@ public struct CustomSidebarWorkspaceSnapshot: Sendable, Equatable {
     /// Coding-agent sessions hosted by this workspace's terminals, most
     /// recent first (`workspaces[i].agents`); the key is omitted when empty.
     public let agents: [CustomSidebarAgentSnapshot]
+    /// Wheelhouse IDE: the project's earlier agent sessions (`workspaces[i].sessions`).
+    public let sessions: WheelhouseSessionList
 
     /// Creates a workspace snapshot from already-resolved leaf values.
     public init(
@@ -121,8 +123,10 @@ public struct CustomSidebarWorkspaceSnapshot: Sendable, Equatable {
         remote: Remote?,
         agents: [CustomSidebarAgentSnapshot] = [],
         groupId: UUID? = nil,
-        taskStatus: String
+        taskStatus: String,
+        sessions: WheelhouseSessionList = .empty
     ) {
+        self.sessions = sessions
         self.taskStatus = taskStatus
         self.groupId = groupId
         self.id = id

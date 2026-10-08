@@ -39,9 +39,14 @@ DONE              —
   The links open in the app's browser, and one button copies your sign-ins from Chrome so that
   they open signed in.
 - **Many agents per project.** The board's Agents view lists every agent across your projects
-  by what it is doing, with the ones waiting on you first. When a project runs more than one
-  agent, an Agents panel opens on the right with each agent's task and sub-agents; it collapses
-  to a narrow rail. Agents on SSH hosts are listed with the local ones.
+  by what it is doing, with the ones waiting on you first. While a project is selected, an
+  Agents panel on the right shows each of its agents with its task and sub-agents; it collapses
+  to an Agents button in the title bar. Agents on SSH hosts are listed with the local ones.
+- **Session history per project.** Every agent session started in a project is kept after it
+  ends: which harness ran it, what it was asked first, when and for how long. The Agents panel
+  lists them under the running agents; Resume opens a session again in a new tab with the
+  harness's own resume command, and each has a `wheelhouse://` link to paste elsewhere. Claude
+  Code and Codex are recognised as they come; any other harness takes a few lines of JSON.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
@@ -108,8 +113,11 @@ sidebar, and an **Example Project** to look around in.
      <img src="wheelhouse/docs/images/agents-view.png" width="620" alt="The board's Agents view: two agents under Needs you, one under Working and one under Idle, each with its project and task">
    </p>
 
-   When a project has more than one agent, the Agents panel opens on the right with each
-   agent's state and task. Its button collapses it to a narrow rail.
+   While a project is selected, the Agents panel is open on the right with each agent's state
+   and task. Its button collapses it to an Agents button in the title bar, which opens it
+   again. Under the agents it lists the project's
+   earlier sessions: **Resume** opens one again in a new tab, and the link button copies a
+   `wheelhouse://` link to it.
 
    <p align="center">
      <img src="wheelhouse/docs/images/agents-panel.png" width="400" alt="The Agents panel on the right of a project: three agents, one waiting, one working and one idle">
