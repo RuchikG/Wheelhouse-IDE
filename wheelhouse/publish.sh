@@ -46,11 +46,8 @@ built=$(cat "$archive.commit")
 git fetch --quiet origin main
 git merge-base --is-ancestor "$head" origin/main || fail "$head is not on origin/main; push first"
 
-slug=$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')
-case "$slug" in
-  */*) ;;
-  *) fail "origin is not a GitHub repository: $slug" ;;
-esac
+slug=$(wheelhouse_repo_slug)
+[ -n "$slug" ] || fail "origin is not a GitHub repository"
 api="https://api.github.com/repos/$slug"
 
 token=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null | sed -n 's/^password=//p')
@@ -73,6 +70,7 @@ if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; the
 fi
 
 echo "$name ($(du -h "$archive" | cut -f1 | tr -d ' ')), built from $(git rev-parse --short "$head"), to $slug as $tag"
+[ -f "$archive.appcast.xml" ] || echo "note: this build does not update itself (it was built without an update key)"
 if [ "$check" = 1 ]; then
   echo "checks passed; nothing was published"
   exit 0
@@ -95,16 +93,20 @@ id=$(printf '%s' "$created" | field id)
 page=$(printf '%s' "$created" | field html_url)
 echo "draft created: $page"
 
+# upload <file> <content type> [<name on the release>]
 upload() {
+  as=${3:-$(basename "$1")}
   uploaded=$(github -X POST -H "Content-Type: $2" --data-binary @"$1" \
-    "https://uploads.github.com/repos/$slug/releases/$id/assets?name=$(basename "$1")")
+    "https://uploads.github.com/repos/$slug/releases/$id/assets?name=$as")
   size=$(printf '%s' "$uploaded" | field size)
   [ "$size" = "$(stat -f %z "$1")" ] ||
-    fail "$(basename "$1") did not upload whole; the draft is still at $page"
-  echo "uploaded $(basename "$1")"
+    fail "$as did not upload whole; the draft is still at $page"
+  echo "uploaded $as"
 }
 upload "$archive" application/zip
 upload "$archive.sha256" text/plain
+# Installed copies look for this file on the latest release to learn about a newer version.
+[ ! -f "$archive.appcast.xml" ] || upload "$archive.appcast.xml" application/xml appcast.xml
 
 if [ "$draft" = 1 ]; then
   echo "left as a draft: $page"
@@ -118,4 +120,8 @@ page=$(printf '%s' "$published" | field html_url)
 want=$(cut -d' ' -f1 "$archive.sha256")
 got=$(curl -sSL "https://github.com/$slug/releases/download/$tag/$name" | shasum -a 256 | cut -d' ' -f1)
 [ "$got" = "$want" ] || fail "the published $name has checksum $got, expected $want; see $page"
+if [ -f "$archive.appcast.xml" ]; then
+  curl -sSL "https://github.com/$slug/releases/latest/download/appcast.xml" | cmp -s - "$archive.appcast.xml" ||
+    fail "the latest release does not serve this version's appcast.xml, so installed copies will not see it; see $page"
+fi
 echo "published and verified: $page"

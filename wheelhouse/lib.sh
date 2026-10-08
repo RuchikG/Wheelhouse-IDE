@@ -31,3 +31,12 @@ wheelhouse_bundle_board() {
   cp "$WHEELHOUSE_ROOT/wheelhouse/board/sidebars/projects-board.js" \
     "$WHEELHOUSE_ROOT/wheelhouse/board/sidebars/project-agents.js" "$1/Contents/Resources/sidebars/"
 }
+
+# The GitHub repository this checkout pushes to, as owner/name; empty when origin is elsewhere.
+wheelhouse_repo_slug() {
+  slug=$(git -C "$WHEELHOUSE_ROOT" remote get-url origin 2>/dev/null |
+    sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')
+  case "$slug" in
+    */*) printf '%s\n' "$slug" ;;
+  esac
+}

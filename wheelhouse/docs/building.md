@@ -42,7 +42,7 @@ wheelhouse/release.sh 0.1.0
 
 It is a Release build with its own bundle id (`com.cmuxterm.app.staging.wheelhouse`), so it has
 its own settings, runs next to an installed cmux, and never updates itself from cmux's release
-feed. The board command `proj` is inside it. It is signed for local use only, without an Apple
+feed (see [Updates](#updates) for its own). The board command `proj` is inside it. It is signed for local use only, without an Apple
 Developer ID, so a downloaded copy has to be approved once: open it, then choose "Open Anyway"
 under System Settings → Privacy & Security.
 
@@ -57,3 +57,30 @@ It only takes an archive built from the commit that is checked out, with that co
 `origin/main` and no release of that version yet. The release is created as a draft, gets the
 archive and its checksum, and becomes public last; then the archive is downloaded back and its
 checksum compared. The GitHub token is the one git already uses for the repository.
+
+### Updates
+
+A release build can update itself from your fork's releases. For that it needs an update key,
+which you create once:
+
+```sh
+swift wheelhouse/update-key.swift new ~/.wheelhouse/update-key
+```
+
+With the key in place, `release.sh` writes the key's public half and the address of the latest
+release's `appcast.xml` into the app, signs the archive with the key and writes the
+`appcast.xml` for that version next to it; `publish.sh` uploads it with the archive. An
+installed copy looks at that file once an hour and when you click the update button at the foot
+of the sidebar (or choose Check for Updates…), offers the newer version, and installs it without
+another approval in System Settings. The version must
+be digits and dots (`0.1.4`), because it is also the build number that one release is compared
+to the next by.
+
+- The key is a file that only you should have. Keep a copy somewhere safe and never commit it:
+  installed copies accept only updates signed with it, so after losing it every user has to
+  download the next version by hand once more.
+- `WHEELHOUSE_UPDATE_KEY` names another key file; set it to nothing to build a release that does
+  not update itself. `WHEELHOUSE_UPDATE_FEED` and `WHEELHOUSE_UPDATE_DOWNLOADS` replace the
+  address of the appcast and the folder of the archive when the releases are not on GitHub.
+- Without a key the build never looks for updates, as before.
+- A developer build (`wheelhouse/build.sh`) never updates itself.

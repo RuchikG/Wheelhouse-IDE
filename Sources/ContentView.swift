@@ -15505,7 +15505,8 @@ struct SidebarFooterButtons: View {
                         SidebarMobileConnectButton()
                     }
                     if shows(.help) {
-                        SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
+                        // Wheelhouse IDE: one update button where cmux has its help menu.
+                        WheelhouseUpdateButton(model: updateViewModel)
                     }
                 }
             }

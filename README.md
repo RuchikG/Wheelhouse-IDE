@@ -74,6 +74,13 @@ DONE              —
 It needs macOS 14 or later and runs on Apple silicon and Intel. The app has its own settings and
 runs next to an installed cmux without touching it.
 
+**Updating.** From version 0.1.4 the app updates itself. When a newer version is out, an
+"Update Available" button appears at the foot of the sidebar; click it, then Install and
+Relaunch, and the app downloads the version, installs it and opens again, without another trip
+to System Settings. The button there looks for a new version when you click it, and the app
+looks by itself once an hour. To get from 0.1.3 or earlier to a version that does this, download
+the latest release once more and replace the app.
+
 To build it yourself, see [Building from source](wheelhouse/docs/building.md).
 
 ## Getting started
@@ -178,7 +185,6 @@ What we plan to work on next, roughly in this order within each area.
 **Install and updates**
 
 - Builds signed with an Apple Developer ID, so macOS opens the app without the extra approval.
-- Updates from inside the app.
 
 **Later**
 

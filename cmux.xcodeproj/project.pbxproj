@@ -4162,6 +4162,7 @@
 		E1C0DE00000000000000E104 /* WheelhouseCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0DE00000000000000E102 /* WheelhouseCodeEditor */; };
 		E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */; };
 		172B96819F6CFA00C632ACE6 /* WheelhouseProjects.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0B100FE158AA078B564C48 /* WheelhouseProjects.swift */; };
+		7A3C51E2D90B4F6681AA2C12 /* WheelhouseUpdateButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3C51E2D90B4F6681AA2C13 /* WheelhouseUpdateButton.swift */; };
 		A500120C /* WindowAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001222 /* WindowAccessor.swift */; };
 		063BC42CEE257D6213A2E30C /* WindowAndDragTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */; };
 		A59170000000000000000001 /* WindowAppearanceSnapshotPaneBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A59170000000000000000002 /* WindowAppearanceSnapshotPaneBackgroundTests.swift */; };
@@ -8547,6 +8548,7 @@
 		7A3C51E2D90B4F6681AA2C11 /* WheelhouseAgents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseAgents.swift; sourceTree = "<group>"; };
 		E1C0DE00000000000000E10A /* WheelhouseDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseDefaults.swift; sourceTree = "<group>"; };
 		EF0B100FE158AA078B564C48 /* WheelhouseProjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseProjects.swift; sourceTree = "<group>"; };
+		7A3C51E2D90B4F6681AA2C13 /* WheelhouseUpdateButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelhouseUpdateButton.swift; sourceTree = "<group>"; };
 		A5001222 /* WindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAccessor.swift; sourceTree = "<group>"; };
 		BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAndDragTests.swift; sourceTree = "<group>"; };
 		A59170000000000000000002 /* WindowAppearanceSnapshotPaneBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearanceSnapshotPaneBackgroundTests.swift; sourceTree = "<group>"; };
@@ -11914,6 +11916,7 @@
 				A6C719FAEB13BCC9380A04CD /* Workspace+RestoredAgentNotifications.swift */,
 				EF0B100FE158AA078B564C48 /* WheelhouseProjects.swift */,
 				7A3C51E2D90B4F6681AA2C11 /* WheelhouseAgents.swift */,
+				7A3C51E2D90B4F6681AA2C13 /* WheelhouseUpdateButton.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -16646,6 +16649,7 @@
 				7A3C51E2D90B4F6681AA2C10 /* WheelhouseAgents.swift in Sources */,
 				E1C0DE00000000000000E109 /* WheelhouseDefaults.swift in Sources */,
 				172B96819F6CFA00C632ACE6 /* WheelhouseProjects.swift in Sources */,
+				7A3C51E2D90B4F6681AA2C12 /* WheelhouseUpdateButton.swift in Sources */,
 				A500120C /* WindowAccessor.swift in Sources */,
 				9065A0020000000000000001 /* WindowAppKitCapture.swift in Sources */,
 				A5001900A1B2C3D4E5F60718 /* WindowBackgroundComposition.swift in Sources */,

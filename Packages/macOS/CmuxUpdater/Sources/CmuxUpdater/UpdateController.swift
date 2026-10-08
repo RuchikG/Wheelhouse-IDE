@@ -129,7 +129,8 @@ public final class UpdateController {
         self.defaults = defaults
         self.fileManager = fileManager
         self.hostBundle = hostBundle
-        let isDevLikeBundle = isDevLikeBundle ?? Self.isDevLikeBundleIdentifier(hostBundle.bundleIdentifier)
+        let isDevLikeBundle = isDevLikeBundle
+            ?? Self.isDevLikeBundle(identifier: hostBundle.bundleIdentifier, info: hostBundle.infoDictionary)
         self.isDevLikeBundle = isDevLikeBundle
         settings.apply(to: defaults)
         if isDevLikeBundle {
@@ -402,5 +403,11 @@ extension UpdateController {
             || bundleIdentifier.hasPrefix("com.cmuxterm.app.debug.")
             || bundleIdentifier == "com.cmuxterm.app.staging"
             || bundleIdentifier.hasPrefix("com.cmuxterm.app.staging.")
+    }
+
+    /// Whether the build stays off the update feed: a DEV or staging build, unless it is a
+    /// Wheelhouse IDE release with a feed of its own.
+    static func isDevLikeBundle(identifier: String?, info: [String: Any]?) -> Bool {
+        isDevLikeBundleIdentifier(identifier) && !WheelhouseUpdates.hasOwnFeed(info: info)
     }
 }

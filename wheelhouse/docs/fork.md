@@ -86,6 +86,7 @@ nightly and RC icon sets are still cmux's.
 | `Sources/WheelhouseDefaults.swift` | Preferences the app starts with on top of cmux's defaults |
 | `Sources/WheelhouseProjects.swift` | The board from inside the app: the first-launch set-up and the New Project form, both run the bundled `proj` |
 | `wheelhouse/release.sh`, `publish.sh` | Build the app that is handed to other people, and publish it as a GitHub release |
+| `wheelhouse/update-key.swift` | The key that signs a release's updates: create it, print its public half, sign an archive |
 | `wheelhouse/brand` | The post-build step that names the app's text Wheelhouse IDE, and the icon source |
 
 After changing anything under `webviews/`, regenerate the bundle:
@@ -126,7 +127,12 @@ at launch (`Sources/RemoteTui/SSHTuiAgentStatusProjector.swift`,
 in `CustomSidebarWorkspaceSnapshot`, two lines in `CustomSidebarDataContextBuilder`, one in
 `Sources/Workspace+CustomSidebarSnapshot.swift`), the `wheelhouse` URL scheme in
 `Resources/Info.plist` and one line in `Sources/AppDelegate+CmuxSSHURL.swift` that hands
-`wheelhouse://session/…` links to it. Two
+`wheelhouse://session/…` links to it. Updates add one check to
+`Packages/macOS/CmuxUpdater` (`UpdateController.isDevLikeBundle`): cmux keeps staging builds off
+its update feed, and a release that carries a feed of its own
+([Updates](building.md#updates)) is let through; and one line in the sidebar footer
+(`Sources/ContentView.swift`) puts a single update button (`Sources/WheelhouseUpdateButton.swift`)
+where cmux has its help menu, whose entries stay in the Help menu of the menu bar. Two
 additions keep `claude` working in the app's terminals when it is installed as a shell alias
 or outside the `PATH` (`Resources/shell-integration/cmux-zsh-integration.zsh`,
 `Resources/bin/cmux-claude-wrapper`). The tab right-click menu is built by the Bonsplit submodule, which
