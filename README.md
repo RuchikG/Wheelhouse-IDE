@@ -89,7 +89,7 @@ Open the app. The first launch sets up the board by itself: the lanes, the board
 sidebar, and an **Example Project** to look around in.
 
 <p align="center">
-  <img src="wheelhouse/docs/images/first-launch.png" width="720" alt="Wheelhouse IDE after the first launch: the board with its five lanes and the Example Project card, next to the project's terminal">
+  <img src="wheelhouse/docs/images/first-launch.png" width="720" alt="Wheelhouse IDE after the first launch: the board with its five lanes and the Example Project card, the project's terminal, and the Agents panel on the right">
 </p>
 
 1. **Look around.** Click the Example Project card to jump into its workspace. The chips on the
@@ -106,7 +106,7 @@ sidebar, and an **Example Project** to look around in.
    ⇧⌘F searches inside the files.
 
    <p align="center">
-     <img src="wheelhouse/docs/images/project-open.png" width="720" alt="The new project on the board in the Design lane, with its folder open as a tab next to its terminal">
+     <img src="wheelhouse/docs/images/project-open.png" width="720" alt="The new project on the board in the Design lane, with its folder open as a tab next to its terminal and the Agents panel on the right">
    </p>
 
 4. **Stay signed in.** Link tabs have their own cookies. Click the key button at the top of the
