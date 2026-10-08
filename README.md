@@ -120,7 +120,7 @@ sidebar, and an **Example Project** to look around in.
    `wheelhouse://` link to it.
 
    <p align="center">
-     <img src="wheelhouse/docs/images/agents-panel.png" width="400" alt="The Agents panel on the right of a project: three agents, one waiting, one working and one idle">
+     <img src="wheelhouse/docs/images/agents-panel.png" width="320" alt="The Agents panel on the right of a project: one agent, and under it four earlier sessions, each with its harness, first prompt, a Resume button and a link button">
    </p>
 
 That is all a local project needs. More in [Project board](wheelhouse/board/README.md) and
@@ -163,7 +163,7 @@ What we plan to work on next, roughly in this order within each area.
 
 - Show status from outside tools on the card: the state of its tracker item and of its
   pipeline, not only the link to them.
-- Show whether agents on SSH hosts are working, waiting or idle, like local ones.
+- Resume sessions on SSH hosts from a project's history; today they are listed without it.
 - Manage git worktrees for projects on remote hosts, and open a remote project's folder from
   its card.
 - A project agent: one agent per project that knows the project's links, repositories and

@@ -148,30 +148,27 @@ function iconButton(icon, help, action) {
 
 function sessionRow(s) {
   const resumable = () => CAN_OPEN_SESSIONS && Boolean(s()?.canResume);
-  return HStack({ spacing: 6 }, [
-    VStack({ spacing: 3 }, [
-      HStack({ spacing: 6 }, [
-        Text(() => s()?.name || s()?.kind || "Agent").font(10).weight("semibold").color("secondary")
-          .lineLimit(1)
-          .paddingHorizontal(5).paddingVertical(1)
-          .background(CARD_HOVER).cornerRadius(4)
-          .layoutPriority(2),
-        Text(() => s()?.title || "No prompt recorded").font(11)
-          .color(() => (s()?.title ? "primary" : "tertiary")).lineLimit(1).truncation("tail"),
-        Spacer({ minLength: 0 }),
-      ]),
-      line(Text(() => sessionMeta(s() ?? {})).font(10).color("tertiary").lineLimit(1).truncation("tail")),
-    ]).frame({ maxWidth: "infinity" }),
-    when(resumable, "resume", () =>
-      Text("Resume").font(11).weight("semibold").color(WORKING).lineLimit(1)
-        .paddingHorizontal(8).paddingVertical(4)
-        .cornerRadius(6)
-        .background(CARD)
-        .hoverBackground(CARD_HOVER)
-        .help("Open this session again in a new tab")
-        .onTap(() => wheelhouse.session(s()))),
-    when(() => CAN_OPEN_SESSIONS, "link", () =>
-      iconButton("link", "Copy this session's link", () => wheelhouse.session(s(), { copyLink: true }))),
+  return VStack({ spacing: 4 }, [
+    HStack({ spacing: 6 }, [
+      Text(() => s()?.name || s()?.kind || "Agent").font(10).weight("semibold").color("secondary")
+        .lineLimit(1)
+        .paddingHorizontal(5).paddingVertical(1)
+        .background(CARD_HOVER).cornerRadius(4),
+      Spacer({ minLength: 0 }),
+      when(resumable, "resume", () =>
+        Text("Resume").font(11).weight("semibold").color(WORKING).lineLimit(1)
+          .paddingHorizontal(8).paddingVertical(3)
+          .cornerRadius(6)
+          .background(CARD)
+          .hoverBackground(CARD_HOVER)
+          .help("Open this session again in a new tab")
+          .onTap(() => wheelhouse.session(s()))),
+      when(() => CAN_OPEN_SESSIONS, "link", () =>
+        iconButton("link", "Copy this session's link", () => wheelhouse.session(s(), { copyLink: true }))),
+    ]),
+    line(Text(() => s()?.title || "No prompt recorded").font(11)
+      .color(() => (s()?.title ? "primary" : "tertiary")).lineLimit(2).truncation("tail")),
+    line(Text(() => sessionMeta(s() ?? {})).font(10).color("tertiary").lineLimit(1).truncation("tail")),
   ])
     .paddingHorizontal(10).paddingVertical(7)
     .cornerRadius(8)
