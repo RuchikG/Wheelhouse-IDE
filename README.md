@@ -58,6 +58,8 @@ DONE              —
   and the language server runs there. For this the host needs only `python3`.
 - **Agent notifications from SSH hosts.** A small Claude Code hook tells you when an agent on a
   remote machine needs input or has finished.
+- **Updates itself.** When a newer version is out, the app says so at the foot of the sidebar
+  and installs it with one click; see [Install](#install).
 - **Everything in cmux.** Workspaces, splits, notifications, the in-app browser and the `cmux`
   command work as they do upstream, and the
   [cmux documentation](https://cmux.com/docs/getting-started) applies.
