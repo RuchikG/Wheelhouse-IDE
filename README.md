@@ -81,6 +81,10 @@ to System Settings. The button there looks for a new version when you click it, 
 looks by itself once an hour. To get from 0.1.3 or earlier to a version that does this, download
 the latest release once more and replace the app.
 
+<p align="center">
+  <img src="wheelhouse/docs/images/update-available.png" width="520" alt="The foot of the sidebar with an Update Available button, and above it the version, its size and date with an Install and Relaunch button">
+</p>
+
 To build it yourself, see [Building from source](wheelhouse/docs/building.md).
 
 ## Getting started
@@ -96,6 +100,8 @@ sidebar, and an **Example Project** to look around in.
    card open its links as browser tabs. Drag the card to another lane as the work moves on.
 2. **Add your project.** Click the **+** at the top of the board, give the project a name and
    pick its folder. It opens in its own workspace, in the lane you chose.
+   A project whose workspace you close stays on the board under **Closed**: click it to open it
+   again, or right-click it and choose **Remove from board** when it is finished.
 
    <p align="center">
      <img src="wheelhouse/docs/images/new-project.png" width="460" alt="The New Project form: name, folder, lane, summary and an optional command to start with">
