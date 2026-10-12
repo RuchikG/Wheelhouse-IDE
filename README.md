@@ -181,11 +181,8 @@ What we plan to work on next, roughly in this order within each area.
 
 **Project board**
 
-- Show status from outside tools on the card: the state of its tracker item and of its
-  pipeline, not only the link to them.
 - Resume sessions on SSH hosts from a project's history; today they are listed without it.
-- Manage git worktrees for projects on remote hosts, and open a remote project's folder from
-  its card.
+- Open a remote project's folder from its card.
 - A project agent: one agent per project that knows the project's links, repositories and
   lane, and can be asked to move the work along.
 
