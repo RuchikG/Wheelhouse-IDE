@@ -3141,6 +3141,8 @@ class TerminalController {
             }
             WheelhouseAgentsPanel.setCollapsed(collapsed)
             return v2Ok(id: id, result: ["collapsed": collapsed])
+        case "wheelhouse.remote_folder.open":
+            return v2Result(id: id, self.v2WheelhouseRemoteFolderOpen(params: params))
         case "wheelhouse.session.open":
             guard let project = params["project"] as? String, let session = params["id"] as? String,
                   WheelhouseSessions.open(project: project, id: session, copyLink: v2Bool(params, "copy_link") ?? false)

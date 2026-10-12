@@ -91,6 +91,8 @@ proj new <name> [--dir <folder>] [--lane <lane>] [--summary <text>] [--agent <co
 proj example               add the example project, or open it when it is there
 proj sync                  write the projects' links into the installed board again
 proj open <project>        create the project's worktrees and workspace (no-op when already open)
+proj folder <project>      open the project's folder as an editor tab in its workspace
+                           (Wheelhouse IDE); the folder on its host for a remote project
 proj adopt <project>       turn the workspace you are in into the project's workspace
 proj ls                    projects with their lane, workspace and checkouts
 proj lane <project> <design|dev|review|release|done>

@@ -47,6 +47,7 @@ DONE              —
   lists them under the running agents; Resume opens a session again in a new tab with the
   harness's own resume command, and each has a `wheelhouse://` link to paste elsewhere. Claude
   Code and Codex are recognised as they come; any other harness takes a few lines of JSON.
+  Sessions on Linux SSH hosts are kept and resumed the same way, in a terminal on the host.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
@@ -56,6 +57,7 @@ DONE              —
   Go works out of the box with `gopls`; any other LSP server can be added with one setting.
 - **Remote hosts.** Open a folder or a single file on another machine over SSH. Files are edited
   and saved there, and the language server runs there. For this the host needs only `python3`.
+  A remote project's card opens its folder on the host.
 - **Agent notifications from SSH hosts.** A small Claude Code hook tells you when an agent on a
   remote machine needs input or has finished.
 - **Updates itself.** When a newer version is out, the app says so at the foot of the sidebar
@@ -181,8 +183,6 @@ What we plan to work on next, roughly in this order within each area.
 
 **Project board**
 
-- Resume sessions on SSH hosts from a project's history; today they are listed without it.
-- Open a remote project's folder from its card.
 - A project agent: one agent per project that knows the project's links, repositories and
   lane, and can be asked to move the work along.
 

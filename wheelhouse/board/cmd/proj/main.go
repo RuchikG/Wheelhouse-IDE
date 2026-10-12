@@ -22,6 +22,8 @@ const usage = `proj - project workspaces on cmux
   proj ls                    list projects with their lane, workspace and checkouts
   proj open <project> [--focus]
                              create the project's worktrees and workspace (no-op when already open)
+  proj folder <project>      open the project's folder as an editor tab in its workspace (Wheelhouse IDE);
+                             the folder on its host for a remote project
   proj adopt <project> [workspace]
                              turn an existing workspace (default: the current one) into the project's workspace
   proj lane <project> <lane> move a project to a lane (manifest and board)
@@ -90,6 +92,8 @@ func run(cmd string, args []string) error {
 		return cmdCheck(cfg, all)
 	case "open":
 		return cmdOpen(cfg, all, args)
+	case "folder":
+		return cmdFolder(cfg, all, args)
 	case "adopt":
 		return cmdAdopt(cfg, all, args)
 	case "lane":

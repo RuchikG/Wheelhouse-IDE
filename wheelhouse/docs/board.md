@@ -39,7 +39,9 @@ Design:
   top, then projects with unread notifications.
 - **Click to jump.** Clicking a card selects the project's workspace, and goes straight to the
   agent that is waiting if there is one. Right-click moves the card to another lane or marks it
-  read.
+  read. In Wheelhouse IDE the same menu has **Open Folder**, which opens the project's folder
+  as an editor tab in its workspace: its `dir`, or one tab per repository when it names none.
+  For a remote project that is the folder on its host.
 - **Drag to move.** Drag a card to another lane, or to another place in its own; the name of the
   lane it would land in is tinted while you drag, and Escape gives up. The lane is saved in the
   project file. Cards that wait on you stay first in their lane wherever they are dropped.
@@ -69,8 +71,12 @@ Design:
   and types the harness's resume command there; the link button copies
   `wheelhouse://session/<project>/<session>`, which opens the project and resumes that session
   from anywhere on the Mac (`open wheelhouse://…`), or goes to its tab while it still runs.
-  Sessions on SSH hosts are listed with the host's name and without Resume: the host reports
-  that an agent runs, not which session.
+  Sessions on SSH hosts are recorded the same way, with the host's name. The app asks the
+  host every ten seconds which sessions run in the project's terminals there, with a small
+  Python program it sends over `ssh`; **Resume** then opens a new terminal on the host, goes
+  to the session's folder and types the resume command. This needs `python3` and `/proc` on
+  the host, so a Linux host. On any other host a session is listed with the host's name and
+  without Resume, because all the app then knows is that an agent runs there.
 
   Which sessions are recorded depends on what the app can tell apart in a terminal. Claude Code
   and Codex are built in, as is every agent cmux itself recognises. Any other harness is
@@ -94,7 +100,8 @@ Design:
   read when there is no session file. An entry with `launcher` and `wraps` is a tool that
   starts another harness: a session started through it carries its name and is resumed with
   its command. Only the name a process was called by and its first argument are looked at,
-  and nothing of a command line is stored.
+  and nothing of a command line is stored. The same list is used on SSH hosts, where the
+  paths are the host's.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip

@@ -269,6 +269,16 @@ extension Workspace {
         guard let folder = NewEditorTabPanel.askRemoteFolder(on: host, suggestion: trustedRemoteCurrentDirectory) else {
             return false
         }
+        return openRemoteFolder(folder, on: host, inPane: paneId, toRightOf: anchorTabId)
+    }
+
+    /// Opens `folder` on `host` as an editor tab once the host has confirmed
+    /// it; `folder` may start with `~`. A folder the host does not have is
+    /// reported in an alert.
+    @discardableResult
+    func openRemoteFolder(
+        _ folder: String, on host: String, inPane paneId: PaneID, toRightOf anchorTabId: TabID? = nil
+    ) -> Bool {
         let connection = FilePreviewRemoteFolders.connection(to: host, from: self)
         Task { @MainActor [weak self] in
             switch await connection.resolveFolder(folder) {
@@ -400,5 +410,34 @@ final class NewEditorTabContextMenuItem: NSObject {
         pendingRequest = kind
         defer { pendingRequest = nil }
         NSApp.sendAction(action, to: terminalItem.target, from: terminalItem)
+    }
+}
+
+extension TerminalController {
+    /// `wheelhouse.remote_folder.open`: a folder on another machine as an
+    /// editor tab of a workspace. `host` is anything `ssh <host>` reaches
+    /// without asking; `path` may start with `~` and is checked on the host,
+    /// so the answer only says that the opening has started.
+    func v2WheelhouseRemoteFolderOpen(params: [String: Any]) -> V2CallResult {
+        guard FilePreviewPanel.showsFoldersAsProjects else {
+            return .err(code: "unavailable", message: "The code editor is turned off", data: nil)
+        }
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+        guard let host = (params["host"] as? String)?.trimmingCharacters(in: .whitespaces),
+              !host.isEmpty, !host.hasPrefix("-"), !host.contains("/"), host != ".", host != "..",
+              let path = (params["path"] as? String)?.trimmingCharacters(in: .whitespaces), !path.isEmpty else {
+            return .err(code: "invalid_params", message: "host and path are required", data: nil)
+        }
+        var result: V2CallResult = .err(code: "not_found", message: "Workspace not found", data: nil)
+        v2MainSync {
+            guard let workspace = v2ResolveWorkspace(params: params, tabManager: tabManager),
+                  let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+            else { return }
+            workspace.openRemoteFolder(path, on: host, inPane: pane)
+            result = .ok(["started": true, "host": host, "path": path])
+        }
+        return result
     }
 }

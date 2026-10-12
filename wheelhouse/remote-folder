@@ -3,6 +3,7 @@
 # The host is anything `ssh <host>` reaches without asking for a password.
 #   wheelhouse/remote-folder myhost '~/src/project'
 #   wheelhouse/remote-folder myhost /srv/app --workspace workspace:3
+# The app checks the folder on the host; one it does not find is reported in the app.
 set -eu
 . "$(dirname "$0")/lib.sh"
 [ $# -ge 2 ] || { echo "usage: wheelhouse/remote-folder <host> <folder> [--workspace <id>]" >&2; exit 2; }
@@ -12,23 +13,10 @@ shift 2
 workspace=
 [ "${1:-}" = "--workspace" ] && workspace=${2:?--workspace needs an id}
 case "$host" in
-  */*|.|..|"") echo "not a host: $host" >&2; exit 2 ;;
+  */*|.|..|""|-*) echo "not a host: $host" >&2; exit 2 ;;
 esac
 
-# The remote shell expands a leading ~; the rest travels quoted.
-quoted=$(printf '%s' "${folder#\~}" | sed "s/'/'\\\\''/g")
-case "$folder" in
-  "~"|"~/"*) word="\"\$HOME\"'$quoted'" ;;
-  *) word="'$(printf '%s' "$folder" | sed "s/'/'\\\\''/g")'" ;;
-esac
-path=$(ssh -o BatchMode=yes -o LogLevel=ERROR -- "$host" "cd -- $word && pwd -P") \
-  || { echo "could not open $folder on $host" >&2; exit 1; }
-
-# The app shows the folder whose own path spells a host and a remote path.
-stand_in="$HOME/Library/Application Support/com.cmuxterm.app.debug.$WHEELHOUSE_TAG/Remote/$host$path"
-mkdir -p "$stand_in"
-escaped=$(printf '%s' "$stand_in" | sed 's/\\/\\\\/g; s/"/\\"/g')
-if [ -n "$workspace" ]; then
-  exec "$(dirname "$0")/cli" rpc file.open "{\"paths\":[\"$escaped\"],\"workspace_id\":\"$workspace\"}"
-fi
-exec "$(dirname "$0")/cli" rpc file.open "{\"paths\":[\"$escaped\"]}"
+json() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+params="\"host\":\"$(json "$host")\",\"path\":\"$(json "$folder")\""
+[ -z "$workspace" ] || params="$params,\"workspace_id\":\"$(json "$workspace")\""
+exec "$(dirname "$0")/cli" rpc wheelhouse.remote_folder.open "{$params}"

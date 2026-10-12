@@ -213,7 +213,7 @@ public struct WheelhouseSessionList: Equatable, Sendable {
                 "name": .string(record.name),
                 "startedEpoch": .int(Int(record.startedAt)),
                 "link": .string(WheelhouseSessionLink.string(project: project, id: record.id)),
-                "canResume": .bool(record.resume != nil && record.host == nil),
+                "canResume": .bool(record.resume != nil),
             ]
             if let ended = record.endedAt { fields["endedEpoch"] = .int(Int(ended)) }
             if let title = record.title, !title.isEmpty { fields["title"] = .string(title) }

@@ -155,6 +155,31 @@ import Testing
         ])
     }
 
+    @Test func aSessionOnAHostCanBeResumedOnceItsHostGaveItsId() {
+        var history = WheelhouseSessionHistory()
+        let live = WheelhouseSessionObservation(
+            id: "abc-1", kind: "claude", name: "Claude Code", sessionId: "abc-1", title: "Fix the cart",
+            host: "build-box", directory: "/srv/app", resume: "claude --resume abc-1")
+        _ = history.observe([live], now: 100)
+        _ = history.observe([], now: 110)
+        let ended = WheelhouseSessionList(project: "checkout", records: history.earlier(limit: 5)).values
+        #expect(ended == [
+            .object([
+                "id": .string("abc-1"), "project": .string("checkout"), "kind": .string("claude"),
+                "name": .string("Claude Code"), "startedEpoch": .int(100), "endedEpoch": .int(110),
+                "title": .string("Fix the cart"), "host": .string("build-box"), "directory": .string("/srv/app"),
+                "canResume": .bool(true), "link": .string("wheelhouse://session/checkout/abc-1"),
+            ]),
+        ])
+        // Resumed on the host, it is the same session again and nothing is ended meanwhile.
+        _ = history.observe([live], now: 200)
+        #expect(history.records.count == 1)
+        #expect(history.records[0].endedAt == nil)
+        // While the host does not answer, a session that is not listed is not ended.
+        _ = history.observe([], now: 230, complete: false)
+        #expect(history.records[0].endedAt == nil)
+    }
+
     @Test func readsAProjectFilesName() {
         #expect(WheelhouseProjectFile.name(in: "name: Checkout Redesign\nlane: dev\n") == "Checkout Redesign")
         #expect(WheelhouseProjectFile.name(in: "lane: dev\nname: \"Search: latency\"  # quoted\n") == "Search: latency")

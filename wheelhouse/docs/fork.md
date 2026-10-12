@@ -124,7 +124,8 @@ the title bar's Agents button and the mode bar left out while the panel is up, a
 sidebar's `agents` and take out sessions that are no longer running, such as the ones restored
 at launch (`Sources/RemoteTui/SSHTuiAgentStatusProjector.swift`,
 `Sources/Workspace+CustomSidebarSnapshot.swift`). Session history, in the same file, adds the
-`wheelhouse.session.open` socket method, a `sessions` list on a sidebar's workspaces (one field
+`wheelhouse.session.open` socket method (and the editor `wheelhouse.remote_folder.open`, which
+the board's Open Folder and `wheelhouse/remote-folder` call), a `sessions` list on a sidebar's workspaces (one field
 in `CustomSidebarWorkspaceSnapshot`, two lines in `CustomSidebarDataContextBuilder`, one in
 `Sources/Workspace+CustomSidebarSnapshot.swift`), the `wheelhouse` URL scheme in
 `Resources/Info.plist` and one line in `Sources/AppDelegate+CmuxSSHURL.swift` that hands

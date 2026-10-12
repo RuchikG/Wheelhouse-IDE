@@ -209,6 +209,19 @@ const addExample = () => runProj(["example"], "Adding the example", "The example
 const restoreLanes = () => runProj(["init"], "Restoring lanes", "The lanes were not restored.");
 const openProject = (slug) => runProj(["open", slug, "--focus"], "Opening project", "The project was not opened.");
 const removeProject = (slug) => runProj(["rm", slug], "Removing project", "The project was not removed.");
+// The project's folder as an editor tab in its workspace: on its host for a remote project.
+const openFolder = (slug) => runProj(["folder", slug], "Opening folder", "The folder was not opened.");
+
+// Editor tabs are Wheelhouse IDE's, so the entry is left out of the menu in cmux.
+function folderMenu(w) {
+  if (!CAN_MANAGE) return [];
+  return [
+    Button("Open Folder", () => {
+      const slug = project(w())?.slug;
+      if (slug) openFolder(slug);
+    }),
+  ];
+}
 
 function saveLink(w, kind, address) {
   setEditing(null);
@@ -353,6 +366,7 @@ function card(w) {
     .frame({ maxWidth: "infinity" })
     .onTap(() => jump(w()))
     .contextMenu([
+      ...folderMenu(w),
       ...linkMenu(w),
       laneMenu(w, "Move to lane"),
       Button("Take off the board", () => cmux("workspace.group.remove", { workspace_id: w().id })),

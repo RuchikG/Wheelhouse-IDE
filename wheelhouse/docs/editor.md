@@ -66,6 +66,8 @@ and tools. The tree shows the host's name next to the folder's.
 
 - In a workspace connected to a host with `cmux ssh`, "Open Folder…" asks for a path on that
   host (`~` works), starting from the terminal's directory.
+- On the board, **Open Folder** in a remote project's menu opens the project's folder on its
+  host.
 - From a shell, `wheelhouse/remote-folder <host> <folder>` opens one in any workspace. The host is
   whatever `ssh <host>` reaches without asking for a password.
 - The editor keeps one `ssh` connection open per folder tab and runs a small Python program

@@ -6,6 +6,7 @@ import CmuxSurfaceCatalogModel
 import CmuxWorkspaces
 import Foundation
 import SwiftUI
+import WheelhouseCodeEditor
 
 /// The custom sidebars' `workspaces[i].agents` without stale sessions and with the agents on
 /// `cmux ssh` hosts.
@@ -258,6 +259,10 @@ enum WheelhouseSessions {
             readProjects()
             WheelhouseHarnessScan.readHarnesses(home: home)
         }
+        if !projects.isEmpty, let manager = AppDelegate.shared?.tabManager {
+            WheelhouseRemoteSessionScan.refresh(
+                workspaces: manager.tabs.filter { project(of: $0) != nil }, harnesses: WheelhouseHarnessScan.all)
+        }
         if ticks % 3 == 0 { record() }
     }
 
@@ -297,14 +302,22 @@ enum WheelhouseSessions {
         AppDelegate.shared?.tabManager?.selectWorkspace(workspace)
         if record.endedAt == nil {
             let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: workspace.id, unreadCount: 0).agents
-            if let panel = agents.first(where: { $0.sessionId == record.sessionId })?.panelId {
+            if let panel = agents.first(where: { $0.sessionId == record.sessionId })?.panelId
+                ?? record.sessionId.flatMap({ WheelhouseRemoteSessionScan.panel(ofSession: $0, in: workspace) }) {
                 workspace.focusPanel(panel)
             }
             return
         }
-        guard record.host == nil, let resume = record.resume,
+        guard let resume = record.resume,
               let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
         else { return }
+        if let host = record.host {
+            // A session on a host is opened again in a new terminal there, in its folder.
+            guard workspace.remoteDisplayTarget == host else { return }
+            let input = WheelhouseRemoteSessionProbe.resumeInput(resume: resume, directory: record.directory)
+            _ = workspace.newTerminalSurface(inPane: pane, focus: true, initialInput: input + "\n")
+            return
+        }
         var directory = record.directory
         if let path = directory, !FileManager.default.fileExists(atPath: path) { directory = nil }
         _ = workspace.newTerminalSurface(inPane: pane, focus: true, workingDirectory: directory, initialInput: resume + "\n")
@@ -345,13 +358,19 @@ enum WheelhouseSessions {
         // Sessions restored at launch take a moment to show up again.
         let complete = now.timeIntervalSince(launchedAt) > 20
         var live: [String: [WheelhouseSessionObservation]] = [:]
+        // Projects whose host has not said yet which of its sessions are running.
+        var unsettled: Set<String> = []
         for workspace in manager.tabs {
             guard let project = project(of: workspace) else { continue }
-            live[project, default: []] += observations(in: workspace, index: index)
+            let observed = observations(in: workspace, index: index)
+            live[project, default: []] += observed.sessions
+            if !observed.isComplete { unsettled.insert(project) }
         }
         for project in Set(projects.values) {
             var history = history(project)
-            guard history.observe(live[project] ?? [], now: now.timeIntervalSince1970, complete: complete) else {
+            guard history.observe(
+                live[project] ?? [], now: now.timeIntervalSince1970, complete: complete && !unsettled.contains(project)
+            ) else {
                 histories[project] = history
                 continue
             }
@@ -362,8 +381,29 @@ enum WheelhouseSessions {
         }
     }
 
-    private static func observations(in workspace: Workspace, index: RestorableAgentSessionIndex?) -> [WheelhouseSessionObservation] {
+    /// The sessions running in a workspace. `isComplete` is false while a session that is
+    /// not listed may still be running: its host has not answered, or not lately.
+    private static func observations(
+        in workspace: Workspace, index: RestorableAgentSessionIndex?
+    ) -> (sessions: [WheelhouseSessionObservation], isComplete: Bool) {
         let host = workspace.remoteDisplayTarget
+        if host != nil {
+            // The host knows its sessions' ids, which the app's own view of a remote terminal lacks.
+            switch WheelhouseRemoteSessionScan.answer(for: workspace) {
+            case .pending:
+                return ([], false)
+            case .sessions(let sessions, let isCurrent):
+                let observed = sessions.map { session in
+                    WheelhouseSessionObservation(
+                        id: session.id, kind: session.harness.id, name: session.harness.name, sessionId: session.id,
+                        title: session.title, host: host, directory: session.directory,
+                        resume: session.harness.resumeCommand(id: session.id))
+                }
+                return (observed, isCurrent)
+            case .unavailable:
+                break
+            }
+        }
         var found: [WheelhouseSessionObservation] = []
         var position: [String: Int] = [:]
         let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: nil, unreadCount: 0).agents
@@ -387,7 +427,7 @@ enum WheelhouseSessions {
                 resume: host != nil ? nil : harness?.resumeCommand(id: agent.sessionId)
                     ?? resumeCommand(kind: agent.kind, sessionId: agent.sessionId, registration: indexed?.registration)))
         }
-        guard host == nil else { return found }
+        guard host == nil else { return (found, true) }
         var terminals: [UUID] = []
         for pane in workspace.bonsplitController.allPaneIds {
             for tab in workspace.bonsplitController.tabs(inPane: pane) {
@@ -412,7 +452,7 @@ enum WheelhouseSessions {
             }
         }
         // Agents only cmux can tell apart.
-        guard let index else { return found }
+        guard let index else { return (found, true) }
         for panel in terminals {
             guard let entry = index.exactEntry(workspaceId: workspace.id, panelId: panel),
                   entry.processLiveness == .running, position[entry.snapshot.sessionId] == nil else { continue }
@@ -425,7 +465,7 @@ enum WheelhouseSessions {
                 resume: resumeCommand(
                     kind: snapshot.kind.rawValue, sessionId: snapshot.sessionId, registration: snapshot.registration)))
         }
-        return found
+        return (found, true)
     }
 
     /// The harness's own way back into a session, from its kind and session id alone: the
@@ -435,6 +475,123 @@ enum WheelhouseSessions {
         return SessionRestorableAgentSnapshot(
             kind: kind, sessionId: sessionId, workingDirectory: nil, launchCommand: nil, registration: registration
         ).resumeCommand(includeWorkingDirectoryPrefix: false)
+    }
+}
+
+/// The agent sessions in the terminals of SSH hosts, as each host lists them when asked
+/// (`WheelhouseRemoteSessionProbe`). A host is asked every few seconds while a project's
+/// workspace is connected to it, off the main thread, one question at a time.
+@MainActor
+enum WheelhouseRemoteSessionScan {
+    enum Answer {
+        /// The host was asked and has not answered yet.
+        case pending
+        /// The host cannot be asked this way: no `python3`, no `/proc`, no connection so far.
+        case unavailable
+        /// The sessions in the workspace's terminals. `isCurrent` is false when the host did
+        /// not answer the last time, so the list may have gone stale.
+        case sessions([WheelhouseRemoteSession], isCurrent: Bool)
+    }
+
+    private struct Host {
+        /// The last answer; nil before the first one.
+        var sessions: [WheelhouseRemoteSession]?
+        var isCurrent = false
+        var hasFailed = false
+        var askedAt = Date.distantPast
+        var isAsking = false
+    }
+
+    private static let interval: TimeInterval = 10
+    /// A host that cannot answer is asked again this much later.
+    private static let retryInterval: TimeInterval = 60
+    private static let timeout: TimeInterval = 20
+    private static var hosts: [String: Host] = [:]
+
+    static func answer(for workspace: Workspace) -> Answer {
+        guard let destination = destination(of: workspace), let host = hosts[destination] else { return .pending }
+        guard let sessions = host.sessions else { return host.hasFailed ? .unavailable : .pending }
+        let terminals = terminals(of: workspace)
+        return .sessions(sessions.filter { terminals[$0.terminal] != nil }, isCurrent: host.isCurrent)
+    }
+
+    /// The tab a running session is in.
+    static func panel(ofSession id: String, in workspace: Workspace) -> UUID? {
+        guard let destination = destination(of: workspace),
+              let session = hosts[destination]?.sessions?.first(where: { $0.id == id }) else { return nil }
+        return terminals(of: workspace)[session.terminal]
+    }
+
+    /// Asks the hosts of `workspaces` that are due.
+    static func refresh(workspaces: [Workspace], harnesses: [WheelhouseHarness]) {
+        var connected: Set<String> = []
+        for workspace in workspaces {
+            guard let destination = destination(of: workspace), connected.insert(destination).inserted else { continue }
+            var host = hosts[destination] ?? Host()
+            let wait = host.hasFailed && host.sessions == nil ? retryInterval : interval
+            guard !host.isAsking, Date().timeIntervalSince(host.askedAt) >= wait else { continue }
+            host.isAsking = true
+            host.askedAt = Date()
+            hosts[destination] = host
+            let connection = FilePreviewRemoteFolders.connection(to: destination, from: workspace)
+            let command = WheelhouseRemoteSessionProbe.command(harnesses: harnesses)
+            Task { @MainActor in
+                let output = await run(connection, command)
+                let sessions = output.flatMap { WheelhouseRemoteSessionProbe.sessions(inOutput: $0, harnesses: harnesses) }
+                var host = hosts[destination] ?? Host()
+                host.isAsking = false
+                host.isCurrent = sessions != nil
+                host.hasFailed = sessions == nil
+                if let sessions { host.sessions = sessions }
+                hosts[destination] = host
+            }
+        }
+        // A host nothing is connected to any more is asked afresh the next time.
+        hosts = hosts.filter { connected.contains($0.key) || $0.value.isAsking }
+    }
+
+    private static func destination(of workspace: Workspace) -> String? {
+        guard let configuration = workspace.remoteConfiguration, configuration.transport == .ssh else { return nil }
+        return configuration.destination
+    }
+
+    /// The host's id of each terminal in the workspace, with the tab that shows it.
+    private static func terminals(of workspace: Workspace) -> [String: UUID] {
+        var found: [String: UUID] = [:]
+        for panel in workspace.panels.keys {
+            guard let resource = SurfaceCatalog.shared.projectionIncludingPendingRestore(forPanel: panel)?.resource,
+                  resource.kind == .terminal else { continue }
+            found[resource.key] = panel
+        }
+        return found
+    }
+
+    /// What the probe printed on the host; nil when it could not be run there in time.
+    private static func run(_ connection: CodeEditorRemoteHost, _ command: String) async -> Data? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let process = Process()
+                let output = Pipe()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+                process.arguments = connection.sshArguments + [command]
+                if let environment = connection.environment { process.environment = environment }
+                process.standardInput = FileHandle.nullDevice
+                process.standardOutput = output
+                process.standardError = FileHandle.nullDevice
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: deadline)
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                deadline.cancel()
+                continuation.resume(returning: process.terminationStatus == 0 ? data : nil)
+            }
+        }
     }
 }
 
@@ -468,6 +625,9 @@ enum WheelhouseHarnessScan {
     static func harness(id: String) -> WheelhouseHarness? {
         harnesses.first { $0.id == id }
     }
+
+    /// Every harness: the built-in ones and the user's list.
+    static var all: [WheelhouseHarness] { harnesses }
 
     static func sessions(onTTY tty: String) -> [Session] {
         let agents = WheelhouseHarnessMatch.agents(in: processes(onTTY: tty), harnesses: harnesses)
