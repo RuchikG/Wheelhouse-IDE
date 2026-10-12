@@ -191,8 +191,9 @@ import Testing
 
 /// Talks to a real host. Runs only when `WHEELHOUSE_TEST_REMOTE_HOST` names
 /// an `ssh` destination that needs no password and `WHEELHOUSE_TEST_REMOTE_ROOT`
-/// an existing Go module folder on it. Reads only.
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["WHEELHOUSE_TEST_REMOTE_HOST"] != nil))
+/// an existing Go module folder on it. Reads only, except for the tests that
+/// ask for a scratch folder; those share it, so the suite runs one at a time.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["WHEELHOUSE_TEST_REMOTE_HOST"] != nil), .serialized)
 struct RemoteHostLiveTests {
     private var host: CodeEditorRemoteHost {
         let destination = ProcessInfo.processInfo.environment["WHEELHOUSE_TEST_REMOTE_HOST"] ?? ""
@@ -216,6 +217,39 @@ struct RemoteHostLiveTests {
         let elapsed = try await clock.measure { _ = try await files.list(root) }
         print("one request on the open connection: \(elapsed)")
         #expect(!(try await files.index().paths.isEmpty))
+    }
+
+    @Test func tellsATextFileFromAFolderAndAMissingFile() async {
+        #expect(await host.holdsTextFile(root + "/go.mod"))
+        #expect(!(await host.holdsTextFile(root)))
+        #expect(!(await host.holdsTextFile(root + "/no-such-file.txt")))
+        #expect(!(await host.holdsTextFile("go.mod")))
+    }
+
+    /// A tab for one file is the file's folder as the project: the file is
+    /// read and saved there, and a file beside the folder is read-only.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["WHEELHOUSE_TEST_REMOTE_SCRATCH"] != nil))
+    func savesOneFileThroughItsFolder() async throws {
+        let scratch = ProcessInfo.processInfo.environment["WHEELHOUSE_TEST_REMOTE_SCRATCH"] ?? ""
+        let setUp = RemoteProjectFiles(root: scratch, host: host)
+        defer { setUp.close() }
+        try await setUp.createDirectory(scratch + "/one")
+        try await setUp.createFile(scratch + "/one/note.txt")
+        try await setUp.createFile(scratch + "/beside.txt")
+
+        let path = scratch + "/one/note.txt"
+        #expect(await host.holdsTextFile(path))
+        let files = RemoteProjectFiles(root: (path as NSString).deletingLastPathComponent, host: host)
+        defer { files.close() }
+        let opened = try await files.read(path)
+        #expect(!opened.isReadOnly)
+        _ = try await files.write("saved on the host\n", to: path, expectedModified: opened.modified)
+        #expect(try await setUp.read(path).content == "saved on the host\n")
+        #expect(try await files.read(scratch + "/beside.txt").isReadOnly)
+
+        try await setUp.trash(scratch + "/one")
+        try await setUp.trash(scratch + "/beside.txt")
+        #expect(try await setUp.list(scratch).isEmpty)
     }
 
     /// Writes, so it only runs when `WHEELHOUSE_TEST_REMOTE_SCRATCH` names an
