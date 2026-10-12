@@ -283,6 +283,28 @@ extension Workspace {
         return true
     }
 
+    /// Opens a text file on the host this workspace is connected to as an
+    /// editor tab, which saves it back there. False leaves the file to the
+    /// read-only preview: the editor is off, the workspace is not connected
+    /// with `ssh`, or the file is not text the editor can open.
+    func openRemoteFileInEditor(
+        _ remotePath: String,
+        inPane paneId: PaneID,
+        isCurrent: @MainActor () -> Bool
+    ) async -> Bool {
+        guard FilePreviewPanel.showsFoldersAsProjects, remotePath.hasPrefix("/"),
+              let remote = remoteConfiguration, remote.transport == .ssh else { return false }
+        switch FilePreviewKindResolver.initialMode(for: URL(fileURLWithPath: remotePath)) {
+        case .text, .quickLook: break
+        case .pdf, .image, .media: return false
+        }
+        let host = remote.destination
+        let connection = FilePreviewRemoteFolders.connection(to: host, from: self)
+        guard await connection.holdsTextFile(remotePath), isCurrent(),
+              let standIn = FilePreviewRemoteFolders.standIn(host: host, remoteFile: remotePath) else { return false }
+        return !openFileSurfaces(inPane: paneId, filePaths: [standIn], focus: true, reuseExisting: true).isEmpty
+    }
+
     @discardableResult
     private func openEditorTabs(_ filePaths: [String], inPane paneId: PaneID, toRightOf anchorTabId: TabID?) -> Bool {
         guard !filePaths.isEmpty else { return false }

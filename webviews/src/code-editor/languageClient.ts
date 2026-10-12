@@ -1,5 +1,6 @@
 import * as monaco from "monaco-editor";
 import { postToHost } from "./bridge";
+import { RestartPolicy } from "./serverRestarts";
 import {
   acceptUnopenedFiles,
   editedFiles,
@@ -27,6 +28,8 @@ class HostTransport implements Transport {
   private readonly documentURIs = new Map<string, string>();
   /** Ids of the rename requests that are waiting for their answer. */
   private readonly renames = new Set<unknown>();
+  /** Ids of the requests the server has not answered yet. */
+  private readonly unanswered = new Set<unknown>();
   /** Settles when every message received so far has been handed to the client. */
   private delivered: Promise<void> = Promise.resolve();
 
@@ -54,13 +57,33 @@ class HostTransport implements Transport {
     if (this.answerForOtherKindOfFile(message)) {
       return Promise.resolve();
     }
-    this.restoreDocumentURICase(message);
     const request = message as { id?: unknown; method?: string };
-    if (request.method === "textDocument/rename" && request.id !== undefined) {
-      this.renames.add(request.id);
+    const isRequest = request.method !== undefined && request.id !== undefined;
+    // The server of this name may be a new one by now; nothing of this client's may reach it.
+    if (this.current.state === "closed") {
+      if (isRequest) {
+        this.fail(request.id);
+      }
+      return Promise.resolve();
+    }
+    this.restoreDocumentURICase(message);
+    if (isRequest) {
+      this.unanswered.add(request.id);
+      if (request.method === "textDocument/rename") {
+        this.renames.add(request.id);
+      }
     }
     postToHost({ type: "lsp", server: this.server, json: JSON.stringify(message) });
     return Promise.resolve();
+  }
+
+  /** Answers a request with an error, so whoever asked stops waiting. */
+  private fail(id: unknown): void {
+    this.receive({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32000, message: "The language server ended." },
+    } as unknown as Message);
   }
 
   /**
@@ -130,6 +153,9 @@ class HostTransport implements Transport {
   receive(message: Message): void {
     this.delivered = this.delivered.then(async () => {
       const answer = message as { id?: unknown; method?: string; result?: unknown };
+      if (answer.method === undefined) {
+        this.unanswered.delete(answer.id);
+      }
       if (answer.method === undefined && this.renames.delete(answer.id)) {
         const unopened = new Set<string>();
         let isHeld = true;
@@ -158,6 +184,10 @@ class HostTransport implements Transport {
     for (const listener of this.stateListeners) {
       listener(this.current);
     }
+    this.renames.clear();
+    for (const id of Array.from(this.unanswered)) {
+      this.fail(id);
+    }
   }
 
   toString(): string {
@@ -176,13 +206,39 @@ function locateUnopenedFile(uri: string, range: ServerRange) {
   };
 }
 
+/** What a client registered with the editor: completion, hover, diagnostics and the rest. */
+const featuresOf = new WeakMap<object, monaco.IDisposable>();
+
+/** Monaco's client, with its editor features kept so they can be taken away when its server ends. */
+class LanguageClient extends monaco.lsp.MonacoLspClient {
+  protected override createFeatures(): monaco.IDisposable {
+    const features = super.createFeatures();
+    featuresOf.set(this, features);
+    return features;
+  }
+}
+
+type RunningServer = {
+  transport: HostTransport;
+  client: LanguageClient;
+  startedAt: number;
+};
+
+/** The owner Monaco's client gives the diagnostics a server publishes. */
+const DIAGNOSTICS_OWNER = "lsp";
+
 /**
  * One language client per kind of file, named by file extension. The host
- * decides whether a server exists for that kind and runs it.
+ * decides whether a server exists for that kind and runs it. A server that
+ * ends (it crashed, the connection to its host dropped) is started again.
  */
 export class LanguageClients {
-  private readonly transports = new Map<string, HostTransport>();
+  private readonly running = new Map<string, RunningServer>();
   private readonly requested = new Set<string>();
+  private readonly restarts = new Map<string, RestartPolicy>();
+  private readonly waiting = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Servers that kept ending and are no longer started by themselves. */
+  private readonly givenUp = new Set<string>();
 
   constructor(private readonly openForEdit: OpenForEdit) {}
 
@@ -202,20 +258,69 @@ export class LanguageClients {
   }
 
   receiveState(server: string, state: "open" | "closed" | "unavailable"): void {
-    if (state === "open" && !this.transports.has(server)) {
+    if (state === "open" && !this.running.has(server)) {
       const transport = new HostTransport(server, this.openForEdit);
-      this.transports.set(server, transport);
-      const client = new monaco.lsp.MonacoLspClient(transport);
+      const client = new LanguageClient(transport);
+      // A server that ends before it answers leaves the client's start-up unfinished; that is handled when it ends.
+      (client as unknown as { _initPromise?: Promise<unknown> })._initPromise?.catch(() => {});
+      this.running.set(server, { transport, client, startedAt: Date.now() });
       const bridge = (client as unknown as { _bridge?: DocumentBridge<ReturnType<typeof locateUnopenedFile>> })._bridge;
       if (!acceptUnopenedFiles(bridge, locateUnopenedFile)) {
         console.error("code editor: language client internals changed; jumps to unopened files will fail");
       }
     } else if (state === "closed") {
-      this.transports.get(server)?.close();
+      this.serverEnded(server);
     }
   }
 
   receiveMessage(server: string, message: unknown): void {
-    this.transports.get(server)?.receive(message as Message);
+    this.running.get(server)?.transport.receive(message as Message);
+  }
+
+  /**
+   * Tries the servers that were given up on once more. Called when the user
+   * comes back to the window, which is when a lost network is likely back.
+   */
+  retry(): void {
+    for (const server of Array.from(this.givenUp)) {
+      this.givenUp.delete(server);
+      postToHost({ type: "lspStart", server });
+    }
+  }
+
+  /** Takes the ended server's client out of the editor and plans the next start. */
+  private serverEnded(server: string): void {
+    const ended = this.running.get(server);
+    if (!ended) {
+      return;
+    }
+    this.running.delete(server);
+    ended.transport.close();
+    featuresOf.get(ended.client)?.dispose();
+    (ended.client as unknown as { _bridge?: { dispose?: () => void } })._bridge?.dispose?.();
+    // What the server said about its files no longer holds.
+    for (const model of monaco.editor.getModels()) {
+      if (model.uri.path.toLowerCase().endsWith(`.${server}`)) {
+        monaco.editor.setModelMarkers(model, DIAGNOSTICS_OWNER, []);
+      }
+    }
+    let policy = this.restarts.get(server);
+    if (!policy) {
+      policy = new RestartPolicy();
+      this.restarts.set(server, policy);
+    }
+    const delay = policy.delayAfterExit(Date.now() - ended.startedAt);
+    if (delay === undefined) {
+      this.givenUp.add(server);
+      return;
+    }
+    clearTimeout(this.waiting.get(server));
+    this.waiting.set(
+      server,
+      setTimeout(() => {
+        this.waiting.delete(server);
+        postToHost({ type: "lspStart", server });
+      }, delay),
+    );
   }
 }

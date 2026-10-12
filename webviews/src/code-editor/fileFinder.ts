@@ -42,3 +42,30 @@ export function isWithin(path: string, folder: string): boolean {
 export function movedPath(path: string, from: string, to: string): string | undefined {
   return isWithin(path, from) ? to + path.slice(from.length) : undefined;
 }
+
+/** The folders between `root` and the file at `path`, outermost first; none when the file is not inside `root`. */
+export function foldersAbove(path: string, root: string): string[] {
+  if (!path.startsWith(`${root}/`)) {
+    return [];
+  }
+  const folders: string[] = [];
+  let end = path.indexOf("/", root.length + 1);
+  while (end !== -1) {
+    folders.push(path.slice(0, end));
+    end = path.indexOf("/", end + 1);
+  }
+  return folders;
+}
+
+/**
+ * The expanded folders that are gone: their parent folder was listed just now
+ * and no longer holds them. A folder under a collapsed or unreadable parent
+ * is kept, because nothing was learned about it.
+ */
+export function vanishedFolders(
+  expanded: Iterable<string>,
+  listed: ReadonlySet<string>,
+  shown: { has(path: string): boolean },
+): string[] {
+  return [...expanded].filter((folder) => listed.has(folder.slice(0, folder.lastIndexOf("/"))) && !shown.has(folder));
+}

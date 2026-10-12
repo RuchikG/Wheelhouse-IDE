@@ -4,7 +4,7 @@ import WebKit
 final class CodeEditorWebView: WKWebView {
     var onPointerDown: (() -> Void)?
     var onBecomeFirstResponder: (() -> Void)?
-    /// A folder is open in the page, which then has shortcuts of its own.
+    /// A folder with its tree is open in the page, which then has shortcuts of its own.
     var showsProject = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

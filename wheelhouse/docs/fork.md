@@ -106,7 +106,8 @@ errors and failed asset loads are logged under the `wheelhouse.code-editor` subs
 
 cmux moves quickly, so the fork keeps its changes small: new code goes in its own package and
 files, and upstream files are touched only where the editor hooks in (the file panel, the app's
-key monitor, the built-in tab bar actions), for the one-line telemetry rule in
+key monitor, the built-in tab bar actions, and one check in
+`Sources/FileExplorerPreviewCoordinator.swift` that hands a remote text file to the editor), for the one-line telemetry rule in
 `Sources/FeatureFlags.swift`, for one line in `Sources/CmuxMain.swift` that registers the
 fork's preferences, for the check in `Sources/RemoteTui/SSHTuiWorkspaceCoordinator.swift` that
 makes agent hooks on SSH hosts opt-in, and for the two checks (`Sources/cmuxApp.swift`,

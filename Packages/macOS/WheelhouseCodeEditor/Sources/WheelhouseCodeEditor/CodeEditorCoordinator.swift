@@ -87,7 +87,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
             forMainFrameOnly: true
         ))
         let webView = CodeEditorWebView(frame: .zero, configuration: configuration)
-        webView.showsProject = project != nil
+        webView.showsProject = project.map { $0.file == nil } ?? false
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false
@@ -114,7 +114,7 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         self.project = project
         self.options = options
         self.theme = theme
-        webView?.showsProject = true
+        webView?.showsProject = project.file == nil
         flush()
     }
 
@@ -156,9 +156,11 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
                 "root": project.rootPath,
                 "name": (project.rootPath as NSString).lastPathComponent,
                 "openFiles": session.openFiles,
+                "expanded": session.expandedFolders,
             ]
             message["activeFile"] = session.activeFile
             message["remote"] = project.remote?.name
+            message["file"] = project.file
             send(message)
         }
         if let document, let sequence = sync.outgoingSequence(for: document) {
@@ -430,12 +432,13 @@ public final class CodeEditorCoordinator: NSObject, WKScriptMessageHandler, WKNa
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Remembers which files the project page has open.
+    /// Remembers which files the project page has open and which folders are expanded.
     private func saveProjectSession(_ body: [String: Any]) {
-        guard let project else { return }
+        guard let project, project.file == nil else { return }
         ProjectEditorSession(
             openFiles: (body["open"] as? [String] ?? []).filter { $0.hasPrefix("/") },
-            activeFile: body["active"] as? String
+            activeFile: body["active"] as? String,
+            expandedFolders: (body["expanded"] as? [String] ?? []).filter { $0.hasPrefix("/") }
         ).save(root: project.rootPath, host: project.remote?.name)
     }
 

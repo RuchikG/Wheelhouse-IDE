@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { findFiles, invalidName, movedPath } from "../src/code-editor/fileFinder";
+import { findFiles, foldersAbove, invalidName, movedPath, vanishedFolders } from "../src/code-editor/fileFinder";
 
 const paths = ["cmd/proj/main.go", "main.go", "docs/main-ideas.md", "internal/mainline/run.go", "README.md"];
 
@@ -30,4 +30,25 @@ test("a moved folder moves the paths inside it and nothing else", () => {
   expect(movedPath("/p/calc", "/p/calc", "/p/sum")).toBe("/p/sum");
   expect(movedPath("/p/calc/a.go", "/p/calc", "/p/sum")).toBe("/p/sum/a.go");
   expect(movedPath("/p/calculus/a.go", "/p/calc", "/p/sum")).toBeUndefined();
+});
+
+test("the folders above a file are listed from the root down", () => {
+  expect(foldersAbove("/p/internal/cart/cart.go", "/p")).toEqual(["/p/internal", "/p/internal/cart"]);
+  expect(foldersAbove("/p/main.go", "/p")).toEqual([]);
+});
+
+test("a file outside the root has no folders to show", () => {
+  expect(foldersAbove("/elsewhere/mod/a.go", "/p")).toEqual([]);
+  expect(foldersAbove("/project/a/b.go", "/p")).toEqual([]);
+});
+
+test("an expanded folder is forgotten only when its listed parent no longer holds it", () => {
+  const expanded = ["/p/a", "/p/gone", "/p/a/deep", "/p/closed/inner", "/p/offline/x"];
+  const listed = new Set(["/p", "/p/a"]);
+  const shown = new Set(["/p/a", "/p/a/deep", "/p/closed", "/p/offline"]);
+  expect(vanishedFolders(expanded, listed, shown)).toEqual(["/p/gone"]);
+});
+
+test("nothing is forgotten when the root could not be listed", () => {
+  expect(vanishedFolders(["/p/a", "/p/a/b"], new Set(), new Set())).toEqual([]);
 });

@@ -62,23 +62,39 @@ struct FilePreviewCodeEditor: View {
     }
 }
 
-/// Folders on remote hosts, shown as folder tabs.
+/// Folders and single files on remote hosts, shown as editor tabs.
 ///
 /// A file tab is a path on this Mac, so a remote folder is stood in for by an
 /// empty folder whose own path spells the host and the remote path:
 /// `<directory>/<host>/<remote path>`. Opening that folder opens the remote
-/// one, which also brings the tab back with the session after a restart.
+/// one, which also brings the tab back with the session after a restart. A
+/// single remote file is stood in for the same way, by an empty folder under
+/// `fileDirectory`, so the path also tells which of the two it is.
 enum FilePreviewRemoteFolders {
-    static var directory: URL {
+    static var directory: URL { supportDirectory("Remote") }
+
+    /// Where the stand-ins for single remote files are.
+    static var fileDirectory: URL { supportDirectory("RemoteFile") }
+
+    private static func supportDirectory(_ name: String) -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "wheelhouse", isDirectory: true)
-            .appendingPathComponent("Remote", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
     }
 
-    /// Creates the stand-in for `remotePath` (absolute) on `host` and returns its path.
+    /// Creates the stand-in for the folder `remotePath` (absolute) on `host` and returns its path.
     static func standIn(host: String, remotePath: String) -> String? {
+        standIn(in: directory, host: host, remotePath: remotePath)
+    }
+
+    /// Creates the stand-in for the file `remoteFile` (absolute) on `host` and returns its path.
+    static func standIn(host: String, remoteFile: String) -> String? {
+        standIn(in: fileDirectory, host: host, remotePath: remoteFile)
+    }
+
+    private static func standIn(in directory: URL, host: String, remotePath: String) -> String? {
         guard remotePath.hasPrefix("/"), !host.isEmpty, !host.contains("/"), host != ".", host != ".." else { return nil }
         let folder = directory.appendingPathComponent(host, isDirectory: true).path + remotePath
         do {
@@ -91,6 +107,15 @@ enum FilePreviewRemoteFolders {
 
     /// The host and remote path a stand-in folder stands for; `nil` for any other path.
     static func remoteFolder(forStandIn path: String) -> (host: String, path: String)? {
+        remotePath(forStandIn: path, in: directory)
+    }
+
+    /// The host and remote path of the single file a stand-in stands for; `nil` for any other path.
+    static func remoteFile(forStandIn path: String) -> (host: String, path: String)? {
+        remotePath(forStandIn: path, in: fileDirectory)
+    }
+
+    private static func remotePath(forStandIn path: String, in directory: URL) -> (host: String, path: String)? {
         let prefix = (directory.path as NSString).standardizingPath + "/"
         let standardized = (path as NSString).standardizingPath
         guard standardized.hasPrefix(prefix) else { return nil }
@@ -119,20 +144,31 @@ enum FilePreviewRemoteFolders {
 }
 
 extension FilePreviewPanel {
-    /// What the tab's header shows as its path: `host:path` for a remote folder.
+    /// What the tab's header shows as its path: `host:path` for a remote folder or file.
     var headerPath: String {
-        FilePreviewRemoteFolders.remoteFolder(forStandIn: filePath).map { "\($0.host):\($0.path)" } ?? filePath
+        let remote = FilePreviewRemoteFolders.remoteFolder(forStandIn: filePath)
+            ?? FilePreviewRemoteFolders.remoteFile(forStandIn: filePath)
+        return remote.map { "\($0.host):\($0.path)" } ?? filePath
     }
 
     /// The folder this tab shows as a project, on this Mac or on a remote host.
+    /// A tab for a single remote file is the file's folder, showing that file alone.
     @MainActor
     var editorProject: CodeEditorProject {
+        let workspace = tabMetadataHost as? Workspace
+        if let file = FilePreviewRemoteFolders.remoteFile(forStandIn: filePath) {
+            return CodeEditorProject(
+                rootPath: (file.path as NSString).deletingLastPathComponent,
+                remote: FilePreviewRemoteFolders.connection(to: file.host, from: workspace),
+                file: file.path
+            )
+        }
         guard let remote = FilePreviewRemoteFolders.remoteFolder(forStandIn: filePath) else {
             return CodeEditorProject(rootPath: filePath)
         }
         return CodeEditorProject(
             rootPath: remote.path,
-            remote: FilePreviewRemoteFolders.connection(to: remote.host, from: tabMetadataHost as? Workspace)
+            remote: FilePreviewRemoteFolders.connection(to: remote.host, from: workspace)
         )
     }
 }

@@ -268,4 +268,35 @@ import Testing
         ProjectEditorSession().save(root: "/proj", to: defaults)
         #expect(defaults.dictionary(forKey: ProjectEditorSession.defaultsKey)?.isEmpty == true)
     }
+
+    @Test func remembersExpandedFoldersAlsoWithNothingOpen() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let session = ProjectEditorSession(expandedFolders: ["/proj/cmd", "/proj/cmd/app"])
+        session.save(root: "/proj", to: defaults)
+        #expect(ProjectEditorSession.load(root: "/proj", from: defaults) == session)
+        ProjectEditorSession().save(root: "/proj", to: defaults)
+        #expect(defaults.dictionary(forKey: ProjectEditorSession.defaultsKey)?.isEmpty == true)
+    }
+
+    @Test func readsASessionSavedBeforeFoldersWereRemembered() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(["/proj": ["open": ["/proj/a.go"], "active": "/proj/a.go"]], forKey: ProjectEditorSession.defaultsKey)
+        #expect(
+            ProjectEditorSession.load(root: "/proj", from: defaults)
+                == ProjectEditorSession(openFiles: ["/proj/a.go"], activeFile: "/proj/a.go")
+        )
+    }
+
+    @Test func keepsOnlySoManyExpandedFolders() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let folders = (0..<(ProjectEditorSession.maximumExpandedFolders + 20)).map { "/proj/d\($0)" }
+        ProjectEditorSession(expandedFolders: folders).save(root: "/proj", to: defaults)
+        #expect(
+            ProjectEditorSession.load(root: "/proj", from: defaults).expandedFolders.count
+                == ProjectEditorSession.maximumExpandedFolders
+        )
+    }
 }

@@ -45,6 +45,9 @@ struct FileExplorerPreviewCoordinator {
                         workspace.handKeyboardFocusFromRightSidebarAfterFileOpen(to: panel)
                     }
                 } else if let remote = provider as? any RemoteFileExplorerProvider {
+                    if await workspace.openRemoteFileInEditor(
+                        path, inPane: pane, isCurrent: { isCurrent() && store.resourceContextID == context }
+                    ) { return }
                     if try await Self.refreshExistingRemotePreview(
                         path: path, providerIdentity: providerIdentity, workspace: workspace, pane: pane,
                         store: store, context: context, isCurrent: isCurrent,

@@ -29,6 +29,8 @@ tree on the left, a strip of the files you have opened from it, and the editor.
 
 - Folders load when expanded. `.git` is hidden. The tree and the open file are refreshed when the
   window regains focus, and with the ↻ button.
+- The tree follows the open file: switching to a file opens the folders above it and scrolls to
+  its row.
 - Right-click in the tree for New File…, New Folder…, Rename… and Move to Trash. Names are typed
   in place: Return accepts, Escape gives up. An open file follows its rename, unsaved edits
   included; a file moved to the Trash leaves the strip.
@@ -40,8 +42,8 @@ tree on the left, a strip of the files you have opened from it, and the editor.
   match selected, and the list stays until Escape clears it. Letter case counts only when the text
   has a capital letter. Binary files, files over 1 MB, `.git` and `node_modules` are left out, and
   a search stops at 1,000 lines or after ten seconds.
-- The files a folder had open, and which one was showing, come back when the folder is opened
-  again, also after a restart. Unsaved edits do not.
+- The files a folder had open, which one was showing, and the folders that were expanded in the
+  tree come back when the folder is opened again, also after a restart. Unsaved edits do not.
 - A folder tab keeps its open files and unsaved edits while another workspace is showing.
 - ⌘S saves the open file and ⌥⌘S saves every file with unsaved edits; both are also in the
   right-click menu of the strip of open files. A dot marks a file with unsaved edits, and the tab
@@ -72,9 +74,14 @@ and tools. The tree shows the host's name next to the folder's.
   connection carries the language server, started through your login shell there so that tools
   on your own `PATH` (`~/go/bin`, for example) are found.
 - There is no Trash on a remote host: the tree's menu says "Delete…" and deleting is final.
-- If the connection drops, the next file operation opens a new one. Language features stay off
-  until the tab is reopened.
-- Single remote files opened from the Files sidebar are still read-only previews.
+- If the connection drops, the next file operation opens a new one, and the language server is
+  started again by itself (see [Language servers](#language-servers)).
+
+A single file works the same way. In a workspace connected with `cmux ssh`, a text file opened
+from the Files sidebar becomes an editor tab for that one file: no tree, ⌘S saves it on the host,
+and the language server runs there, rooted at the file's folder. A jump to another file opens it
+in the same tab, next to the first one. Images, PDFs and other files the editor cannot open as
+text keep cmux's read-only preview.
 
 `cmux ssh` is cmux's own feature and installs its remote daemon on the host. On some hosts it
 fails with "secure directory … has an ancestor not controlled by root or the effective user":
@@ -101,6 +108,11 @@ other files opens them in the strip with the change unsaved, so you can look and
 A single-file tab holds only its own file, so there such a rename is refused as a whole with a
 note to open the folder.
 
+A server that ends, because it crashed or the connection to its host dropped, is started again
+and given the open files: after one second, then after 5, 15 and 60 seconds if it keeps ending
+right away. After that the editor stops trying, so a host without the server is not asked
+forever, and tries once more each time the window gets the focus back.
+
 Other servers that speak LSP over standard input and output can be added, by file extension:
 
 ```sh
@@ -114,10 +126,9 @@ logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
 ## Known limits
 
 - A folder tab cannot move a file to another folder, search with a pattern or replace across
-  files, and it does not remember which folders were expanded.
-- If a language server exits, its features stay off in that tab until the tab is reopened.
-- A remote file opened on its own (from the Files sidebar, or by ⌘-clicking a path in a remote
-  terminal) is a copy, as in cmux: it is not saved back. Open its folder instead.
+  files.
+- A remote file opened by ⌘-clicking a path in a remote terminal is a copy, as in cmux: it is
+  not saved back. Open it from the Files sidebar, or open its folder.
 - A remote folder tab does not notice a file changed on the host until the file is opened or
   the window regains focus, and it refuses to overwrite such a change without asking.
 - Markdown source editing still uses the native editor.

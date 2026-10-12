@@ -1,13 +1,17 @@
 import Foundation
 
-/// The files a project editor had open, remembered per folder so the tab shows
-/// them again after a restart.
+/// The files a project editor had open and the folders expanded in its tree,
+/// remembered per folder so the tab shows them again after a restart.
 struct ProjectEditorSession: Equatable, Sendable {
     static let defaultsKey = "wheelhouse.projectEditor.sessions"
+    /// More expanded folders than this are not worth a slower launch.
+    static let maximumExpandedFolders = 500
 
     /// Absolute paths, in the order of the strip.
     var openFiles: [String] = []
     var activeFile: String?
+    /// Absolute paths of the folders expanded in the tree.
+    var expandedFolders: [String] = []
 
     /// - Parameter host: The remote host that holds the folder; `nil` for this Mac.
     static func load(root: String, host: String? = nil, from defaults: UserDefaults = .standard) -> ProjectEditorSession {
@@ -16,17 +20,21 @@ struct ProjectEditorSession: Equatable, Sendable {
         }
         return ProjectEditorSession(
             openFiles: stored["open"] as? [String] ?? [],
-            activeFile: stored["active"] as? String
+            activeFile: stored["active"] as? String,
+            expandedFolders: stored["expanded"] as? [String] ?? []
         )
     }
 
     func save(root: String, host: String? = nil, to defaults: UserDefaults = .standard) {
         var sessions = defaults.dictionary(forKey: Self.defaultsKey) ?? [:]
-        if openFiles.isEmpty {
+        if openFiles.isEmpty, expandedFolders.isEmpty {
             sessions.removeValue(forKey: Self.key(root, host))
         } else {
             var stored: [String: Any] = ["open": openFiles]
             stored["active"] = activeFile
+            if !expandedFolders.isEmpty {
+                stored["expanded"] = Array(expandedFolders.prefix(Self.maximumExpandedFolders))
+            }
             sessions[Self.key(root, host)] = stored
         }
         defaults.set(sessions, forKey: Self.defaultsKey)

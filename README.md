@@ -54,8 +54,8 @@ DONE              —
   by name, search inside files, and create, rename and delete from the tree.
 - **Language servers.** Completion, hover, go to definition, references, rename and diagnostics.
   Go works out of the box with `gopls`; any other LSP server can be added with one setting.
-- **Remote hosts.** Open a folder on another machine over SSH. Files are edited and saved there,
-  and the language server runs there. For this the host needs only `python3`.
+- **Remote hosts.** Open a folder or a single file on another machine over SSH. Files are edited
+  and saved there, and the language server runs there. For this the host needs only `python3`.
 - **Agent notifications from SSH hosts.** A small Claude Code hook tells you when an agent on a
   remote machine needs input or has finished.
 - **Updates itself.** When a newer version is out, the app says so at the foot of the sidebar
@@ -191,9 +191,8 @@ What we plan to work on next, roughly in this order within each area.
 
 **Code editor**
 
-- Remember which folders were expanded, and show the open file in the tree.
-- Save single remote files back to their host (today a remote folder tab is needed).
-- Bring language features back by themselves after a dropped connection to a host.
+- Save a remote file opened by ⌘-clicking its path in a terminal back to its host; today that
+  works for files opened from the Files sidebar and in folder tabs.
 
 **Install and updates**
 

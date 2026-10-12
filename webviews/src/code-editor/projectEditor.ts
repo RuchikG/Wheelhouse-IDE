@@ -8,7 +8,7 @@ import {
   reveal,
   startOf,
 } from "./editorChrome";
-import { invalidName, isWithin, movedPath } from "./fileFinder";
+import { foldersAbove, invalidName, isWithin, movedPath, vanishedFolders } from "./fileFinder";
 import { HostRequests } from "./hostRequests";
 import { LanguageClients } from "./languageClient";
 import { FileFinder } from "./projectFinder";
@@ -81,12 +81,16 @@ export class ProjectEditor {
   private root = "";
   /** The host that holds the folder; undefined for this machine, which has a Trash. */
   private remote: string | undefined;
+  /** The one file this tab is for; the tree and the folder's shortcuts are then left out. */
+  private sole: string | undefined;
   private active: OpenFile | undefined;
   private tabWidth: number | undefined;
   private reportedDirty = false;
-  /** The open files as last told to the host, which remembers them for the next launch. */
-  private reportedFiles = "";
+  /** The open files and expanded folders as last told to the host, which remembers them for the next launch. */
+  private reportedSession = "";
   private isRestoring = false;
+  /** The active file's row is to be scrolled to once the tree has it. */
+  private revealsActiveRow = false;
   /** A name is being typed into the tree, which must not be redrawn under it. */
   private isNaming = false;
   private treeIsStale = false;
@@ -174,6 +178,7 @@ export class ProjectEditor {
       if (this.active) {
         void this.reloadIfUnchanged(this.active);
       }
+      this.languageClients.retry();
     });
   }
 
@@ -182,18 +187,27 @@ export class ProjectEditor {
       return;
     }
     switch (message.type) {
-      case "project":
+      case "project": {
+        const isFirst = this.root === "";
         this.root = message.root;
         this.remote = message.remote;
+        this.sole = message.file;
+        this.container.classList.toggle("project-sole", this.sole !== undefined);
         this.treeTitle.textContent = message.name;
         this.treeTitle.title = message.remote ? `${message.remote}:${message.root}` : message.root;
         this.treeHost.textContent = message.remote ?? "";
         this.treeHost.hidden = !message.remote;
+        if (isFirst) {
+          for (const folder of message.expanded ?? []) {
+            this.expanded.add(folder);
+          }
+        }
         void this.renderTree();
         if (this.files.size === 0) {
-          void this.restore(message.openFiles ?? [], message.activeFile);
+          void this.restore(this.sole !== undefined ? [this.sole] : (message.openFiles ?? []), this.sole ?? message.activeFile);
         }
         break;
+      }
       case "options":
         this.applyOptions(message.options);
         break;
@@ -229,12 +243,13 @@ export class ProjectEditor {
 
   /** Lists the root and every expanded folder again, then swaps the tree in. */
   private async renderTree(): Promise<void> {
-    if (!this.root || this.isNaming) {
+    if (!this.root || this.sole !== undefined || this.isNaming) {
       return;
     }
     const rows = new Map<string, HTMLElement>();
+    const listed = new Set<string>();
     const list = document.createDocumentFragment();
-    await this.renderDirectory(this.root, 0, list, rows);
+    await this.renderDirectory(this.root, 0, list, rows, listed);
     // Swapping the rows in now would take the name field being typed in with them.
     if (this.isNaming) {
       this.treeIsStale = true;
@@ -245,16 +260,25 @@ export class ProjectEditor {
       this.rows.set(path, row);
     }
     this.treeList.replaceChildren(list);
+    for (const folder of vanishedFolders(this.expanded, listed, rows)) {
+      this.expanded.delete(folder);
+    }
     this.markActiveRow();
+    this.reportSession();
   }
 
+  /** @param listed Collects the folders whose listing was read. */
   private async renderDirectory(
     directory: string,
     depth: number,
     into: DocumentFragment | HTMLElement,
     rows: Map<string, HTMLElement>,
+    listed?: Set<string>,
   ): Promise<void> {
     const result = await this.host.list(directory);
+    if (result.ok) {
+      listed?.add(directory);
+    }
     for (const entry of result.entries ?? []) {
       const path = `${directory}/${entry.name}`;
       const isExpanded = entry.isDirectory && this.expanded.has(path);
@@ -271,7 +295,7 @@ export class ProjectEditor {
       if (isExpanded) {
         const children = element("div", "project-row-children");
         into.append(children);
-        await this.renderDirectory(path, depth + 1, children, rows);
+        await this.renderDirectory(path, depth + 1, children, rows, listed);
       }
     }
   }
@@ -296,9 +320,11 @@ export class ProjectEditor {
           this.rows.delete(known);
         }
       }
+      this.reportSession();
       return;
     }
     this.expanded.add(path);
+    this.reportSession();
     this.setChevron(row, true);
     const children = element("div", "project-row-children");
     row.after(children);
@@ -318,6 +344,29 @@ export class ProjectEditor {
     for (const [path, row] of this.rows) {
       row.classList.toggle("project-row-active", path === this.active?.path);
     }
+    const row = this.active ? this.rows.get(this.active.path) : undefined;
+    if (row && this.revealsActiveRow) {
+      this.revealsActiveRow = false;
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  /** Shows the file's row in the tree: opens the folders above it and scrolls to it. */
+  private async revealInTree(file: OpenFile): Promise<void> {
+    if (this.sole !== undefined || this.isNaming) {
+      return;
+    }
+    this.revealsActiveRow = true;
+    const closed = foldersAbove(file.path, this.root).filter((folder) => !this.expanded.has(folder));
+    if (closed.length === 0) {
+      // A tree that is still loading scrolls to the row when it arrives.
+      this.markActiveRow();
+      return;
+    }
+    for (const folder of closed) {
+      this.expanded.add(folder);
+    }
+    await this.renderTree();
   }
 
   // Changing the tree
@@ -490,7 +539,7 @@ export class ProjectEditor {
       this.languageClients.ensureFor(path);
       this.updateDirty(file);
     }
-    this.reportOpenFiles();
+    this.reportSession();
   }
 
   private async trash(path: string): Promise<void> {
@@ -530,19 +579,22 @@ export class ProjectEditor {
     } finally {
       this.isRestoring = false;
     }
-    this.reportOpenFiles();
+    this.reportSession();
   }
 
-  private reportOpenFiles(): void {
-    if (this.isRestoring) {
+  /** Tells the host which files are open and which folders are expanded, when that changed. */
+  private reportSession(): void {
+    // A tab for one file has nothing to bring back but that file.
+    if (this.isRestoring || this.sole !== undefined) {
       return;
     }
     const open = [...this.strip.children].map((tab) => (tab as HTMLElement).dataset.path ?? "");
     const active = this.active?.path ?? null;
-    const report = JSON.stringify([open, active]);
-    if (report !== this.reportedFiles) {
-      this.reportedFiles = report;
-      postToHost({ type: "projectFiles", open, active });
+    const expanded = [...this.expanded].sort();
+    const report = JSON.stringify([open, active, expanded]);
+    if (report !== this.reportedSession) {
+      this.reportedSession = report;
+      postToHost({ type: "projectFiles", open, active, expanded });
     }
   }
 
@@ -583,7 +635,7 @@ export class ProjectEditor {
       return undefined;
     }
     const file = this.files.get(path) ?? this.addFile(path, name, result);
-    this.reportOpenFiles();
+    this.reportSession();
     return file;
   }
 
@@ -601,6 +653,7 @@ export class ProjectEditor {
     }
     const tab = element("div", "project-tab");
     tab.append(element("span", "project-tab-name"), element("span", "project-tab-close", "×"));
+    tab.classList.toggle("project-tab-pinned", path === this.sole);
     this.strip.append(tab);
     const file: OpenFile = {
       path,
@@ -615,8 +668,14 @@ export class ProjectEditor {
     this.labelTab(file);
     model.onDidChangeContent(() => this.updateDirty(file));
     this.files.set(path, file);
+    this.showStripWhenNeeded();
     this.languageClients.ensureFor(path);
     return file;
+  }
+
+  /** A tab for one file shows the strip only once a jump has opened a second file. */
+  private showStripWhenNeeded(): void {
+    this.strip.hidden = this.sole !== undefined && this.files.size < 2;
   }
 
   private labelTab(file: OpenFile): void {
@@ -653,8 +712,9 @@ export class ProjectEditor {
       this.editor.focus();
     }
     if (isSwitch) {
+      void this.revealInTree(file);
       void this.reloadIfUnchanged(file);
-      this.reportOpenFiles();
+      this.reportSession();
     }
   }
 
@@ -729,9 +789,10 @@ export class ProjectEditor {
     if (!event.metaKey || event.ctrlKey) {
       return;
     }
-    if (event.code === "KeyP" && !event.shiftKey && !event.altKey) {
+    const hasTree = this.sole === undefined;
+    if (hasTree && event.code === "KeyP" && !event.shiftKey && !event.altKey) {
       this.finder.focus();
-    } else if (event.code === "KeyF" && event.shiftKey && !event.altKey) {
+    } else if (hasTree && event.code === "KeyF" && event.shiftKey && !event.altKey) {
       this.search.focus();
     } else if (event.code === "KeyS" && event.altKey && !event.shiftKey) {
       void this.saveAll();
@@ -751,7 +812,7 @@ export class ProjectEditor {
       items.push({ label: "Save", run: () => void this.save(file) });
     }
     items.push({ label: "Save All", run: () => void this.saveAll() });
-    if (file) {
+    if (file && file.path !== this.sole) {
       items.push({ label: "Close", run: () => void this.closeFile(file) });
     }
     showMenu(this.container, event.clientX, event.clientY, items);
@@ -772,6 +833,10 @@ export class ProjectEditor {
   }
 
   private async closeFile(file: OpenFile): Promise<void> {
+    // The file a tab is for closes with its tab.
+    if (file.path === this.sole) {
+      return;
+    }
     if (this.isDirty(file)) {
       const choice = await this.host.confirmClose(file.name);
       if (choice === "cancel") {
@@ -807,8 +872,9 @@ export class ProjectEditor {
       }
     }
     this.fileModels.discard(file.model.uri.toString(), file.model);
+    this.showStripWhenNeeded();
     this.reportDirty();
-    this.reportOpenFiles();
+    this.reportSession();
   }
 
   // Chrome

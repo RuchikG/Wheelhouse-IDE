@@ -194,6 +194,26 @@ body,
   font-size: 9px;
 }
 
+/* A tab for one file has no tree, and that file closes with its tab: only the dot shows. */
+.project-sole .project-tree,
+.project-sole .project-resizer {
+  display: none;
+}
+
+.project-tab-pinned .project-tab-close {
+  visibility: hidden;
+  font-size: 0;
+}
+
+.project-tab-pinned.project-tab-dirty .project-tab-close {
+  visibility: visible;
+}
+
+.project-tab-pinned.project-tab-dirty .project-tab-close::before {
+  content: "●";
+  font-size: 9px;
+}
+
 .project-notice {
   flex: none;
   padding: 6px 12px;

@@ -6,10 +6,14 @@ public struct CodeEditorProject: Equatable, Sendable {
     public var rootPath: String
     /// The machine that holds the folder; `nil` for this Mac.
     public var remote: CodeEditorRemoteHost?
+    /// Absolute path of the one file the editor is for, inside `rootPath`. The
+    /// editor then shows that file without a tree; `nil` shows the folder.
+    public var file: String?
 
-    public init(rootPath: String, remote: CodeEditorRemoteHost? = nil) {
+    public init(rootPath: String, remote: CodeEditorRemoteHost? = nil, file: String? = nil) {
         self.rootPath = rootPath
         self.remote = remote
+        self.file = file
     }
 }
 
@@ -60,6 +64,15 @@ public struct CodeEditorRemoteHost: Equatable, Sendable {
                 "--", destination,
             ]
         )
+    }
+
+    /// Whether `path` on the host is a text file the editor can open. False
+    /// also when the host cannot be reached without a prompt.
+    public func holdsTextFile(_ path: String) async -> Bool {
+        guard path.hasPrefix("/") else { return false }
+        let files = RemoteProjectFiles(root: (path as NSString).deletingLastPathComponent, host: self)
+        defer { files.close() }
+        return (try? await files.read(path)) != nil
     }
 
     /// Why a folder on the host could not be opened, in the host's own words.

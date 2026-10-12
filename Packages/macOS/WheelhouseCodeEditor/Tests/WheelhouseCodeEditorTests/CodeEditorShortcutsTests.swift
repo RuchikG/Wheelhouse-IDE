@@ -46,6 +46,23 @@ import Testing
     }
 
     @MainActor
+    @Test func aTabForOneFileOfAProjectLeavesTheFolderShortcutsToTheApp() {
+        let coordinator = CodeEditorCoordinator()
+        defer { coordinator.close() }
+        let webView = coordinator.ensureWebView(assetDirectory: FileManager.default.temporaryDirectory)
+        let options = CodeEditorOptions(
+            wordWrap: false, lineNumbers: true, indentGuides: true, currentLineHighlight: true, tabWidth: 4
+        )
+        let theme = CodeEditorTheme(background: .black, foreground: .white)
+        coordinator.update(project: CodeEditorProject(rootPath: "/srv/app"), options: options, theme: theme)
+        #expect(webView.showsProject)
+        coordinator.update(
+            project: CodeEditorProject(rootPath: "/srv/app", file: "/srv/app/main.go"), options: options, theme: theme
+        )
+        #expect(!webView.showsProject)
+    }
+
+    @MainActor
     @Test func recognizesFocusInsideTheEditorWebViewOnly() {
         let webView = CodeEditorWebView()
         let inner = NSView()

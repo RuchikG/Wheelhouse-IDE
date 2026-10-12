@@ -44,6 +44,7 @@ export class CodeEditor {
       }
     });
     this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.save());
+    window.addEventListener("focus", () => this.languageClients.retry());
     // A jump to another file (go to definition, a reference) is the host's to show.
     monaco.editor.registerEditorOpener({
       openCodeEditor: (_source, resource, selectionOrPosition) => {

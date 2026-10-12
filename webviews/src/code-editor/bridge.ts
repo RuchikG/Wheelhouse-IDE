@@ -16,8 +16,12 @@ export type CodeEditorHostMessage =
       name: string;
       openFiles?: string[];
       activeFile?: string;
+      /** The folders that were expanded in the tree. */
+      expanded?: string[];
       /** The host that holds the folder, when it is not this machine. */
       remote?: string;
+      /** The one file the tab is for. The page then shows this file and no tree. */
+      file?: string;
     }
   | ({ type: "fsResult"; id: number } & FileResult)
   | { type: "confirmResult"; id: number; choice: "save" | "discard" | "cancel" };
@@ -84,7 +88,7 @@ export type CodeEditorWebMessage =
       to?: string;
       query?: string;
     }
-  | { type: "projectFiles"; open: string[]; active: string | null }
+  | { type: "projectFiles"; open: string[]; active: string | null; expanded: string[] }
   | { type: "confirmClose"; id: number; name: string }
   | { type: "projectDirty"; dirty: boolean };
 
