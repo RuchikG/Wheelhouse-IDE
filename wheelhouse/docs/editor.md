@@ -130,6 +130,10 @@ logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
 
 - A folder tab cannot move a file to another folder, search with a pattern or replace across
   files.
+- ⌘-click on a path in a terminal on a remote host finds the file the way cmux does. An absolute
+  path or one starting with `~` works. A relative path is looked up from the directory the
+  terminal last reported, so it opens only when the shell on the host reports its directory to
+  the app, and a bare file name without a `/` is often not recognised.
 - A remote folder tab does not notice a file changed on the host until the file is opened or
   the window regains focus, and it refuses to overwrite such a change without asking.
 - Markdown source editing still uses the native editor.

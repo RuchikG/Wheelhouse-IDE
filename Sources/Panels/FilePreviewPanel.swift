@@ -1790,7 +1790,8 @@ struct FilePreviewPanelView: View {
             filePath: panel.headerPath,
             foregroundColor: themeForegroundColor
         ) {
-            if panel.previewMode == .text {
+            // The editor of a folder tab saves by itself; these two belong to the native text view.
+            if panel.previewMode == .text, !(usesCodeEditor && panel.isFolder) {
                 PanelHeaderIconButton(
                     systemName: "arrow.counterclockwise",
                     label: String(localized: "filePreview.revert", defaultValue: "Revert"),
@@ -1818,9 +1819,9 @@ struct FilePreviewPanelView: View {
 
     @ViewBuilder
     private func content(previewRevision: Int) -> some View {
-        if panel.isFileUnavailable {
-            fileUnavailableView
-        } else if usesCodeEditor, panel.isFolder {
+        // A folder comes first: one named like a text file, as the stand-in for
+        // a single remote file is, fails to load as text and is still there.
+        if usesCodeEditor, panel.isFolder {
             FilePreviewProjectEditor(
                 panel: panel,
                 isVisibleInUI: isVisibleInUI,
@@ -1829,6 +1830,8 @@ struct FilePreviewPanelView: View {
                 wordWrap: fileEditorWordWrap,
                 onRequestPanelFocus: onRequestPanelFocus
             )
+        } else if panel.isFileUnavailable {
+            fileUnavailableView
         } else {
             switch panel.previewMode {
             case .text:
