@@ -79,11 +79,19 @@ public enum WheelhouseRemoteSessionProbe {
         return found
     }
 
-    /// The command typed into a new terminal on the host to open a session again: the
-    /// harness's resume command, run in the folder the session was in.
-    public static func resumeInput(resume: String, directory: String?) -> String {
-        guard let directory, directory.hasPrefix("/") else { return resume }
-        return "cd -- " + shellWord(directory) + " && " + resume
+    /// The command a new terminal on the host runs to open a session again: the harness's
+    /// resume command in the folder the session was in, through the user's login shell as
+    /// if typed there, so their own `PATH` and aliases apply. A shell follows it, because a
+    /// terminal on a host closes when its command ends.
+    public static func resumeArguments(resume: String, directory: String?) -> [String] {
+        var command = resume
+        if let directory, directory.hasPrefix("/") {
+            command = "cd -- " + shellWord(directory) + " && " + resume
+        }
+        return [
+            "/bin/sh", "-c", "exec \"${SHELL:-/bin/sh}\" -lic \"$1\"", "wheelhouse-resume",
+            command + "; exec \"${SHELL:-/bin/sh}\" -l",
+        ]
     }
 
     private struct Reply: Decodable {

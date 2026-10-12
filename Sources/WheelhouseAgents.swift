@@ -308,16 +308,26 @@ enum WheelhouseSessions {
             }
             return
         }
-        guard let resume = record.resume,
-              let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
-        else { return }
+        guard let resume = record.resume else { return }
         if let host = record.host {
-            // A session on a host is opened again in a new terminal there, in its folder.
+            // A session on a host is opened again there: a new terminal next to one of the
+            // workspace's own, started with the resume command. Typing into a new tab is not
+            // a way in, because a host's terminal takes its command when it is created.
             guard workspace.remoteDisplayTarget == host else { return }
-            let input = WheelhouseRemoteSessionProbe.resumeInput(resume: resume, directory: record.directory)
-            _ = workspace.newTerminalSurface(inPane: pane, focus: true, initialInput: input + "\n")
+            let focused = workspace.focusedPanelId.map { [$0] } ?? []
+            for panel in focused + workspace.panels.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+                guard let source = workspace.cloudTerminalSourcePlacement(forPanel: panel), source.machine.isSSH,
+                      let pane = workspace.paneId(forPanelId: panel) else { continue }
+                _ = workspace.routeCloudPaneTerminalCreate(
+                    source: source, sourcePanelID: panel,
+                    destination: .tab(workspaceID: workspace.id, paneID: pane.id.uuidString, index: nil), focus: true,
+                    commandOverride: WheelhouseRemoteSessionProbe.resumeArguments(resume: resume, directory: record.directory))
+                return
+            }
             return
         }
+        guard let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+        else { return }
         var directory = record.directory
         if let path = directory, !FileManager.default.fileExists(atPath: path) { directory = nil }
         _ = workspace.newTerminalSurface(inPane: pane, focus: true, workingDirectory: directory, initialInput: resume + "\n")

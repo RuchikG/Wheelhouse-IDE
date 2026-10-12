@@ -73,8 +73,9 @@ Design:
   from anywhere on the Mac (`open wheelhouse://…`), or goes to its tab while it still runs.
   Sessions on SSH hosts are recorded the same way, with the host's name. The app asks the
   host every ten seconds which sessions run in the project's terminals there, with a small
-  Python program it sends over `ssh`; **Resume** then opens a new terminal on the host, goes
-  to the session's folder and types the resume command. This needs `python3` and `/proc` on
+  Python program it sends over `ssh`; **Resume** then opens a new terminal on the host that
+  runs the resume command in the session's folder, through your login shell there; when the
+  agent exits the tab keeps a shell. This needs `python3` and `/proc` on
   the host, so a Linux host. On any other host a session is listed with the host's name and
   without Resume, because all the app then knows is that an agent runs there.
 

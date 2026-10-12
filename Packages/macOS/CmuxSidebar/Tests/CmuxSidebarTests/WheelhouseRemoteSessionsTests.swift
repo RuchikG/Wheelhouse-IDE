@@ -157,11 +157,37 @@ import Testing
         #expect(WheelhouseRemoteSessionProbe.sessions(inOutput: output, harnesses: harnesses) == [])
     }
 
-    @Test func resumesInTheSessionsFolder() {
-        #expect(WheelhouseRemoteSessionProbe.resumeInput(resume: "claude --resume abc", directory: "/srv/it's here")
-            == #"cd -- '/srv/it'\''s here' && claude --resume abc"#)
-        #expect(WheelhouseRemoteSessionProbe.resumeInput(resume: "claude --resume abc", directory: nil) == "claude --resume abc")
-        #expect(WheelhouseRemoteSessionProbe.resumeInput(resume: "claude --resume abc", directory: "relative") == "claude --resume abc")
+    @Test func resumesInTheSessionsFolderThroughTheLoginShell() throws {
+        let shell = #"exec "${SHELL:-/bin/sh}" -l"#
+        let inFolder = WheelhouseRemoteSessionProbe.resumeArguments(resume: "claude --resume abc", directory: "/srv/it's here")
+        #expect(inFolder == [
+            "/bin/sh", "-c", #"exec "${SHELL:-/bin/sh}" -lic "$1""#, "wheelhouse-resume",
+            #"cd -- '/srv/it'\''s here' && claude --resume abc; "# + shell,
+        ])
+        #expect(WheelhouseRemoteSessionProbe.resumeArguments(resume: "claude --resume abc", directory: nil).last
+            == "claude --resume abc; " + shell)
+        #expect(WheelhouseRemoteSessionProbe.resumeArguments(resume: "claude --resume abc", directory: "relative").last
+            == "claude --resume abc; " + shell)
+
+        // Run for real with a stand-in shell: the command arrives whole, in the folder.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("it's here \(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let arguments = WheelhouseRemoteSessionProbe.resumeArguments(
+            resume: #"printf '%s|' "$PWD" "a b""#, directory: folder.path)
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: arguments[0])
+        process.arguments = Array(arguments.dropFirst())
+        // `true` as the shell that follows ends the run.
+        process.environment = ["SHELL": "/bin/sh", "PATH": "/usr/bin:/bin"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        #expect(printed.hasSuffix("\(folder.lastPathComponent)|a b|"))
     }
 
     @Test func quotesTheProbeCommandForTheRemoteShell() {
