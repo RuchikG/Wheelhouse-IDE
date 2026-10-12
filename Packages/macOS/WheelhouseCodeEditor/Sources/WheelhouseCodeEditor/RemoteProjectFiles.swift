@@ -72,6 +72,14 @@ final class RemoteProjectFiles: ProjectFiles, @unchecked Sendable {
         )
     }
 
+    /// The first of `paths` that is a file on the host, when that file is
+    /// text the editor can open; `nil` when it is not, or none is a file. A
+    /// folder spelled with `.` or `..` comes back as the host reads it.
+    func firstTextFile(among paths: [String]) async -> String? {
+        guard let first = paths.first else { return nil }
+        return (try? await request("firstFile", path: first, fields: ["paths": paths]))?["found"] as? String
+    }
+
     func write(_ content: String, to path: String, expectedModified: Double?) async throws -> Double {
         var fields: [String: Any] = ["content": content]
         fields["modified"] = expectedModified

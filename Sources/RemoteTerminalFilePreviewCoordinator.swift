@@ -75,6 +75,10 @@ final class RemoteTerminalFilePreviewCoordinator {
                 }
             }
             do {
+                // Wheelhouse: a text file opens in the code editor, which saves it back to its host.
+                if await workspace?.openRemoteTerminalFileInEditor(
+                    tokens: tokens, workingDirectory: directory, from: sourcePanelID
+                ) == true { return }
                 let localURL = try await withThrowingTaskGroup(of: URL.self) { group in
                     group.addTask { try await loader.load(tokens: tokens, workingDirectory: directory) }
                     group.addTask {

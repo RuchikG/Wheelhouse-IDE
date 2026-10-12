@@ -40,6 +40,27 @@ def require_new(path):
         raise Refused("exists")
 
 
+def text_of(path):
+    if os.path.getsize(path) > MAXIMUM_FILE_SIZE:
+        raise Refused("tooLarge")
+    with open(path, "rb") as file:
+        data = file.read()
+    if b"\0" in data:
+        raise Refused("notText")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Refused("notText")
+
+
+def spelled_out(path):
+    # A folder written with "." or ".." is named the way this host reads it.
+    folder, name = os.path.split(path)
+    if any(part in (".", "..") for part in folder.split("/")):
+        folder = os.path.realpath(folder)
+    return os.path.join(folder, name)
+
+
 def natural(name):
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", name)]
 
@@ -126,17 +147,15 @@ def handle(request):
         entries.sort(key=lambda entry: (not entry["isDirectory"], natural(entry["name"])))
         return {"entries": entries}
     if op == "read":
-        if os.path.getsize(path) > MAXIMUM_FILE_SIZE:
-            raise Refused("tooLarge")
-        with open(path, "rb") as file:
-            data = file.read()
-        if b"\0" in data:
-            raise Refused("notText")
-        try:
-            content = data.decode("utf-8")
-        except UnicodeDecodeError:
-            raise Refused("notText")
+        content = text_of(path)
         return {"content": content, "modified": os.path.getmtime(path), "readOnly": not inside(path)}
+    if op == "firstFile":
+        # The first of the paths that is a file decides; a later one is not tried in its place.
+        for candidate in request["paths"]:
+            if candidate.startswith("/") and os.path.isfile(candidate):
+                text_of(candidate)
+                return {"found": spelled_out(candidate)}
+        raise Refused("unreadable")
     if op == "write":
         require_inside(path)
         expected = request.get("modified")

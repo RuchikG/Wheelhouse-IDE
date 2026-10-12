@@ -80,10 +80,11 @@ and tools. The tree shows the host's name next to the folder's.
   started again by itself (see [Language servers](#language-servers)).
 
 A single file works the same way. In a workspace connected with `cmux ssh`, a text file opened
-from the Files sidebar becomes an editor tab for that one file: no tree, ⌘S saves it on the host,
-and the language server runs there, rooted at the file's folder. A jump to another file opens it
-in the same tab, next to the first one. Images, PDFs and other files the editor cannot open as
-text keep cmux's read-only preview.
+from the Files sidebar, or by ⌘-clicking its path in a terminal on the host, becomes an editor
+tab for that one file: no tree, ⌘S saves it on the host, and the language server runs there,
+rooted at the file's folder. A jump to another file opens it in the same tab, next to the first
+one. Images, PDFs and other files the editor cannot open as text keep cmux's read-only preview,
+and a ⌘-clicked Markdown file still opens in the Markdown viewer while that setting is on.
 
 `cmux ssh` is cmux's own feature and installs its remote daemon on the host. On some hosts it
 fails with "secure directory … has an ancestor not controlled by root or the effective user":
@@ -129,8 +130,6 @@ logged under the `wheelhouse.code-editor` subsystem, category `language-server`.
 
 - A folder tab cannot move a file to another folder, search with a pattern or replace across
   files.
-- A remote file opened by ⌘-clicking a path in a remote terminal is a copy, as in cmux: it is
-  not saved back. Open it from the Files sidebar, or open its folder.
 - A remote folder tab does not notice a file changed on the host until the file is opened or
   the window regains focus, and it refuses to overwrite such a change without asking.
 - Markdown source editing still uses the native editor.

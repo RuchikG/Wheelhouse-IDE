@@ -1,5 +1,7 @@
 import AppKit
 import CmuxCore
+import CmuxSettings
+import CmuxTerminalCore
 import Bonsplit
 import WheelhouseCodeEditor
 
@@ -310,9 +312,59 @@ extension Workspace {
         }
         let host = remote.destination
         let connection = FilePreviewRemoteFolders.connection(to: host, from: self)
+        // A stand-in is a folder whatever its name, so it is opened as a file
+        // tab and never as a Markdown one.
         guard await connection.holdsTextFile(remotePath), isCurrent(),
+              let standIn = FilePreviewRemoteFolders.standIn(host: host, remoteFile: remotePath),
+              let panel = openFilePreviewSurfaces(
+                  inPane: paneId, filePaths: [standIn], focus: true, reuseExisting: true
+              ).first else { return false }
+        handKeyboardFocusFromRightSidebarAfterFileOpen(to: panel)
+        return true
+    }
+
+    /// Opens the text file that a ⌘-clicked path in the terminal `sourcePanelId`
+    /// names on this workspace's host, as an editor tab beside the terminal
+    /// that saves it back there. `tokens` are the spellings of the clicked
+    /// path and `workingDirectory` the terminal's folder on the host. False
+    /// leaves the click to cmux's copy: the editor or opening files in the app
+    /// is off, the path is no text file, it is Markdown bound for the viewer,
+    /// or the terminal lost the focus meanwhile.
+    func openRemoteTerminalFileInEditor(
+        tokens: [String],
+        workingDirectory: String?,
+        from sourcePanelId: UUID
+    ) async -> Bool {
+        let routes = FileRouteSettingsStore(defaults: .standard)
+        guard FilePreviewPanel.showsFoldersAsProjects, routes.supportedFileRouteEnabled,
+              let remote = remoteConfiguration, remote.transport == .ssh else { return false }
+        let host = remote.destination
+        let connection = FilePreviewRemoteFolders.connection(to: host, from: self)
+        var home: String?
+        if tokens.contains(where: { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"'")).hasPrefix("~") }),
+           case .success(let folder) = await connection.resolveFolder("~") {
+            home = folder
+        }
+        let candidates = RemoteTerminalPathResolver().candidates(
+            tokens: tokens,
+            workingDirectory: workingDirectory,
+            homeDirectory: home,
+            remoteHost: String(host.split(separator: "@").last ?? "")
+        )
+        // An image, a PDF or Markdown for the viewer is not asked about on the host at all.
+        let isForEditor: (String) -> Bool = { path in
+            if routes.markdownRouteEnabled, FileRouteSettingsStore.isMarkdownPath(path) { return false }
+            switch FilePreviewKindResolver.initialMode(for: URL(fileURLWithPath: path)) {
+            case .text, .quickLook: return true
+            case .pdf, .image, .media: return false
+            }
+        }
+        guard candidates.contains(where: isForEditor),
+              let remotePath = await connection.firstTextFile(among: candidates), isForEditor(remotePath),
+              !Task.isCancelled, !isRetiredFromOwningTabManager, focusedPanelId == sourcePanelId,
+              owningTabManager?.selectedTabId == id,
               let standIn = FilePreviewRemoteFolders.standIn(host: host, remoteFile: remotePath) else { return false }
-        return !openFileSurfaces(inPane: paneId, filePaths: [standIn], focus: true, reuseExisting: true).isEmpty
+        return openOrFocusFilePreviewSplit(from: sourcePanelId, filePath: standIn) != nil
     }
 
     @discardableResult

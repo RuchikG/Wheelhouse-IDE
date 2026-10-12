@@ -75,6 +75,25 @@ public struct CodeEditorRemoteHost: Equatable, Sendable {
         return (try? await files.read(path)) != nil
     }
 
+    /// The file on the host that `paths` name, tried in order, when it is a
+    /// text file the editor can open. The first path that is a file decides;
+    /// a folder spelled with `.` or `..` comes back as the host reads it.
+    /// `nil` also when the host does not answer within `patience`.
+    public func firstTextFile(among paths: [String], patience: Duration = .seconds(20)) async -> String? {
+        let paths = paths.filter { $0.hasPrefix("/") }
+        guard let first = paths.first else { return nil }
+        let files = RemoteProjectFiles(root: (first as NSString).deletingLastPathComponent, host: self)
+        let deadline = Task {
+            try await Task.sleep(for: patience)
+            files.close()
+        }
+        defer {
+            deadline.cancel()
+            files.close()
+        }
+        return await files.firstTextFile(among: paths)
+    }
+
     /// Why a folder on the host could not be opened, in the host's own words.
     public struct FolderFailure: Error, Equatable, Sendable {
         public var message: String

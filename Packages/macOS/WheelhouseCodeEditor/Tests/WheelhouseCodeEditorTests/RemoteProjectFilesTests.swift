@@ -124,6 +124,28 @@ import Testing
         #expect(await failure { _ = try await files.read(root.path + "/gone.go") } == .unreadable("unreadable"))
     }
 
+    /// A clicked path comes as several spellings; the first that is a file decides.
+    @Test func findsTheTextFileAmongSpellingsOfAPath() async throws {
+        let (root, files) = try makeProject()
+        defer {
+            files.close()
+            try? FileManager.default.removeItem(at: root)
+        }
+        // What the helper's `os.path.realpath` gives; Foundation would drop `/private`.
+        let real = try #require(realpath(root.path, nil).map { pointer -> String in
+            defer { free(pointer) }
+            return String(cString: pointer)
+        })
+        try Data([0x00, 0x01]).write(to: root.appendingPathComponent("image.bin"))
+        let main = root.path + "/cmd/app/main.go"
+        #expect(await files.firstTextFile(among: [main + ".", main]) == main)
+        #expect(await files.firstTextFile(among: [root.path + "/cmd", root.path + "/a2.txt"]) == root.path + "/a2.txt")
+        #expect(await files.firstTextFile(among: [root.path + "/cmd/../README.md"]) == real + "/README.md")
+        #expect(await files.firstTextFile(among: [root.path + "/image.bin", main]) == nil)
+        #expect(await files.firstTextFile(among: [root.path + "/missing.go", "a2.txt"]) == nil)
+        #expect(await files.firstTextFile(among: []) == nil)
+    }
+
     @Test func startsAgainAfterTheConnectionEnds() async throws {
         let (root, files) = try makeProject()
         defer {
@@ -224,6 +246,11 @@ struct RemoteHostLiveTests {
         #expect(!(await host.holdsTextFile(root)))
         #expect(!(await host.holdsTextFile(root + "/no-such-file.txt")))
         #expect(!(await host.holdsTextFile("go.mod")))
+    }
+
+    @Test func findsAClickedFileInOneConnection() async {
+        #expect(await host.firstTextFile(among: [root + "/go.mod.", root + "/go.mod"]) == root + "/go.mod")
+        #expect(await host.firstTextFile(among: [root, root + "/no-such-file.txt"]) == nil)
     }
 
     /// A tab for one file is the file's folder as the project: the file is
