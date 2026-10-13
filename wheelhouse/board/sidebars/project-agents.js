@@ -329,8 +329,11 @@ function earlierSessions() {
 
 function panel() {
   return VStack({ spacing: 8 }, [
-    line(Text(() => project()?.title ?? "").font(11).color("secondary").lineLimit(1).truncation("tail"))
-      .paddingHorizontal(4),
+    HStack({ spacing: 6 }, [
+      Text(() => project()?.title ?? "").font(11).color("secondary").lineLimit(1).truncation("tail"),
+      Spacer({ minLength: 0 }),
+      ...(IN_WHEELHOUSE ? [iconButton("sidebar.right", "Collapse to the Agents button", () => setCollapsed(true))] : []),
+    ]).paddingHorizontal(4),
     ...(CAN_START ? projectAgent() : []),
     HStack({ spacing: 6 }, [
       Text("Agents").font(14).weight("semibold"),
@@ -341,7 +344,6 @@ function panel() {
             textButton("New agent", "Start an agent that reads the project's brief and memory, then waits for a task", () =>
               wheelhouse.agent(project(), { role: "agent" })))]
         : []),
-      ...(IN_WHEELHOUSE ? [iconButton("sidebar.right", "Collapse to the Agents button", () => setCollapsed(true))] : []),
     ]).paddingHorizontal(4).paddingTop(CAN_START ? 10 : 0),
     ForEach({ items: agents, key: (e) => e.key }, (e) => agentCard(e)),
     when(() => agents().length === 0, "none", () =>
