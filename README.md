@@ -186,10 +186,6 @@ What we plan to work on next, roughly in this order within each area.
 - A project agent: one agent per project that knows the project's links, repositories and
   lane, and can be asked to move the work along.
 
-**Install and updates**
-
-- Builds signed with an Apple Developer ID, so macOS opens the app without the extra approval.
-
 **Later**
 
 - Following a project's agents from a phone.
