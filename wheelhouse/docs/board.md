@@ -125,7 +125,7 @@ Design:
   read the brief and the memory and then wait for your task. An agent you start by typing its
   command in a terminal is not given either file.
 
-  The harness is yours to pick: the menu next to "Project agent" lists every harness with a
+  The harness is yours to pick: the menu after "Agents start on" lists every harness with a
   `start` command, sets one for this project (`harness` in the project file) or for every
   project (`harness` in `config.yaml`); `proj harness` does the same from a terminal. Claude
   Code and Codex have a start command built in. For another harness, add `"start"` to its

@@ -220,7 +220,7 @@ function harnessMenu() {
     when(() => Boolean(own()?.hasOwnHarness), "clear", () =>
       Button("Use the one for every project here", () =>
         setHarness(["clear", own().project], "The project's harness was not changed."))),
-  ]);
+  ]).fixedSize("horizontal");
 }
 
 // The live agent in the project agent's tab, when cmux can tell what it is doing.

@@ -147,13 +147,13 @@ sidebar, and an **Example Project** to look around in.
    earlier sessions: **Resume** opens one again in a new tab, and the link button copies a
    `wheelhouse://` link to it.
 
-   At the top of the panel is the project's own agent. Pick your harness in its menu once, then
-   **Start with …**: it reads the project's brief, brings the project's memory up to date and
+   At the top of the panel is the project's own agent. Pick your harness under **Agents start
+   on** once, then **Start with …**: it reads the project's brief, brings the project's memory up to date and
    tells you where the project stands. **New agent** starts another agent that has read both
    and waits for your task.
 
    <p align="center">
-     <img src="wheelhouse/docs/images/agents-panel.png" width="320" alt="The Agents panel on the right of a project: one agent, and under it four earlier sessions, each with its harness, first prompt, a Resume button and a link button">
+     <img src="wheelhouse/docs/images/agents-panel.png" width="320" alt="The Agents panel on the right of a project: the project agent with the harness agents start on, the project memory with Update and Open, one agent under a New agent button, and three earlier sessions, each with its harness, first prompt, a Resume button and a link button">
    </p>
 
 That is all a local project needs. More in [Project board](wheelhouse/board/README.md) and
