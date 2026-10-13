@@ -19,4 +19,12 @@ wheelhouse_bundle_board "$WHEELHOUSE_APP_PATH"
 # The string tables and the added files are sealed resources; sign again the way reload.sh does.
 /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der "$WHEELHOUSE_APP_PATH"
 "$WHEELHOUSE_ROOT/wheelhouse/defaults.sh"
+# The build leaves its own "cmux DEV.app" beside this one with the same bundle id; links
+# (wheelhouse://) must open this app, not that one.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+if [ -x "$lsregister" ]; then
+  built="$(dirname "$WHEELHOUSE_APP_PATH")/cmux DEV.app"
+  if [ -d "$built" ]; then "$lsregister" -u "$built" >/dev/null 2>&1 || true; fi
+  "$lsregister" -f "$WHEELHOUSE_APP_PATH" >/dev/null 2>&1 || true
+fi
 echo "Wheelhouse IDE: $WHEELHOUSE_APP_PATH (open it with wheelhouse/open.sh)"
