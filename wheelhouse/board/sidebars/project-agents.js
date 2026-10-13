@@ -1,5 +1,6 @@
-// project-agents: the agents of the selected project, with what each is doing and its
-// sub-agents, and under them the project's earlier sessions, each with a way back into it.
+// project-agents: the selected project's own agent and its memory, the project's other agents
+// with what each is doing and its sub-agents, and under them the project's earlier sessions,
+// each with a way back into it.
 // Wheelhouse IDE shows it in the right sidebar while a project is selected; collapsed, it
 // leaves an Agents button in the title bar.
 
@@ -24,11 +25,18 @@ const STATE = {
 
 const project = computed(() => (data.workspaces() ?? []).find((w) => w.selected));
 
+// The project's own agent, the harness agents are started on and the project's memory come
+// from Wheelhouse IDE; cmux gives none.
+const own = computed(() => project()?.projectAgent);
+const CAN_START = IN_WHEELHOUSE && typeof wheelhouse.agent === "function";
+const ownPanel = () => own()?.running?.panelId;
+
 // Waiting agents lead, then working, then idle; within a state the order does not change.
+// The project agent has its own place above them.
 const agents = computed(() => {
   const w = project();
   return (w?.agents ?? [])
-    .filter((a) => STATE[a.status])
+    .filter((a) => STATE[a.status] && !(CAN_START && a.panelId && a.panelId === ownPanel()))
     .map((a) => ({ key: a.id, w, a }))
     .sort((x, y) => STATE[x.a.status].rank - STATE[y.a.status].rank || (x.key < y.key ? -1 : 1));
 });
@@ -37,7 +45,13 @@ const agents = computed(() => {
 // is its session's title or else the last prompt typed in that tab.
 const agentTab = (e) => (e.w.tabs ?? []).find((t) => t.id === e.a.panelId);
 const agentName = (e) => agentTab(e)?.title || e.a.name || e.a.kind || "agent";
-const agentTask = (e) => e.a.title || agentTab(e)?.latestPrompt || "";
+// An agent started from this panel was first told to read the project's brief, and the project
+// agent is told so again when its memory is to be updated; those messages are not its task.
+const briefed = (text) =>
+  /^((Project|New) agent for .+: read |Read .+ again and bring the project memory up to date)/.test(text ?? "");
+const task = (text) => (briefed(text) ? "" : text ?? "");
+const agentTask = (e) =>
+  task(e.a.title) || task(agentTab(e)?.latestPrompt) || (briefed(e.a.title) ? "Has read the project's brief and memory" : "");
 
 function elapsed(since) {
   const now = data.clock()?.epoch ?? 0;
@@ -84,8 +98,12 @@ function lasted(s) {
   return Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
 }
 
+const sessionTitle = (s) =>
+  task(s.title) || (briefed(s.title) ? "Started with the project's brief and memory" : "No prompt recorded");
+
 const sessionMeta = (s) =>
-  [startedAt(s.startedEpoch), lasted(s), s.host || "this Mac"].filter(Boolean).join(" · ");
+  [s.role === "project" ? "project agent" : "", startedAt(s.startedEpoch), lasted(s), s.host || "this Mac"]
+    .filter(Boolean).join(" · ");
 
 const setCollapsed = (collapsed) => {
   if (IN_WHEELHOUSE && typeof wheelhouse.agentsPanel === "function") wheelhouse.agentsPanel({ collapsed });
@@ -166,7 +184,7 @@ function sessionRow(s) {
       when(() => CAN_OPEN_SESSIONS, "link", () =>
         iconButton("link", "Copy this session's link", () => wheelhouse.session(s(), { copyLink: true }))),
     ]),
-    line(Text(() => s()?.title || "No prompt recorded").font(11)
+    line(Text(() => sessionTitle(s() ?? {})).font(11)
       .color(() => (s()?.title ? "primary" : "tertiary")).lineLimit(2).truncation("tail")),
     line(Text(() => sessionMeta(s() ?? {})).font(10).color("tertiary").lineLimit(1).truncation("tail")),
   ])
@@ -174,6 +192,125 @@ function sessionRow(s) {
     .cornerRadius(8)
     .background(CARD)
     .frame({ maxWidth: "infinity" });
+}
+
+function textButton(label, help, action) {
+  return Text(label).font(11).weight("semibold").color(WORKING).lineLimit(1)
+    .paddingHorizontal(8).paddingVertical(3)
+    .cornerRadius(6)
+    .background(CARD)
+    .hoverBackground(CARD_HOVER)
+    .help(help)
+    .onTap(action);
+}
+
+const harnessName = () => own()?.harness?.name ?? "no harness";
+const setHarness = (args, failed) => wheelhouse.proj(["harness", ...args], { failed });
+
+// The harness agents are started on: a project's own, or the one for every project.
+function harnessMenu() {
+  return Menu(harnessName, [
+    ForEach({ items: () => own()?.harnesses ?? [], key: (h) => h.id }, (h) =>
+      Button(() => (h()?.id === own()?.harness?.id ? "✓ " : "") + (h()?.name ?? ""), () =>
+        setHarness(["set", own().project, h().id], "The project's harness was not changed."))),
+    Divider(),
+    Button(() => "Use " + harnessName() + " for every project", () => {
+      if (own()?.harness) setHarness(["set", own().harness.id], "The harness was not changed.");
+    }),
+    when(() => Boolean(own()?.hasOwnHarness), "clear", () =>
+      Button("Use the one for every project here", () =>
+        setHarness(["clear", own().project], "The project's harness was not changed."))),
+  ]);
+}
+
+// The live agent in the project agent's tab, when cmux can tell what it is doing.
+const ownAgent = () => (project()?.agents ?? []).find((a) => a.panelId && a.panelId === ownPanel() && STATE[a.status]);
+
+const ownTab = () => (project()?.tabs ?? []).find((t) => t.id === ownPanel());
+
+function ownRunning() {
+  const state = () => STATE[ownAgent()?.status];
+  const waiting = () => ownAgent()?.status === "needs_input";
+  return VStack({ spacing: 4 }, [
+    HStack({ spacing: 7 }, [
+      Circle({ size: 7 }).fill(() => state()?.color ?? WORKING),
+      Text(() => own()?.running?.name ?? "Agent").font(12).weight("semibold").lineLimit(1).truncation("tail"),
+      Spacer({ minLength: 0 }),
+      Text(() => (state() ? (state().text + " " + elapsed(ownAgent().sinceEpoch ?? ownAgent().lastActivityAt)).trim() : "running"))
+        .font(10).monospaced().color(() => (waiting() ? NEEDS : "tertiary")).layoutPriority(2),
+    ]),
+    line(Text(() => task(ownAgent()?.title) || task(ownTab()?.latestPrompt) || "Keeps this project's memory").font(11)
+      .lineLimit(2).truncation("tail")),
+  ])
+    .paddingHorizontal(10).paddingVertical(8)
+    .cornerRadius(8)
+    .background(() => (waiting() ? NEEDS_CARD : CARD))
+    .hoverBackground(() => (waiting() ? NEEDS_CARD_HOVER : CARD_HOVER))
+    .frame({ maxWidth: "infinity" })
+    .help("Go to the project agent")
+    .onTap(() => wheelhouse.session(own().running));
+}
+
+function ownStopped() {
+  const last = () => own()?.last;
+  return VStack({ spacing: 6 }, [
+    line(Text(() => (last()
+      ? "Last session: " + startedAt(last().startedEpoch)
+      : "Knows this project's links, repositories, lane, earlier sessions and memory, and asks before it changes anything."))
+      .font(11).color("secondary").lineLimit(3).truncation("tail")),
+    HStack({ spacing: 6 }, [
+      when(() => Boolean(own()?.canStart), "start", () =>
+        textButton(() => "Start with " + harnessName(), "Start the project agent in a new tab", () =>
+          wheelhouse.agent(project(), { role: "project" }))),
+      when(() => CAN_OPEN_SESSIONS && Boolean(last()?.canResume), "resume", () =>
+        textButton("Resume last", "Open the project agent's last session again", () => wheelhouse.session(last()))),
+      Spacer({ minLength: 0 }),
+    ]),
+  ])
+    .paddingHorizontal(10).paddingVertical(8)
+    .cornerRadius(8)
+    .background(CARD)
+    .frame({ maxWidth: "infinity" });
+}
+
+function memoryRow() {
+  return HStack({ spacing: 6 }, [
+    VStack({ spacing: 2 }, [
+      line(Text("Project memory").font(12).weight("semibold").lineLimit(1)),
+      line(Text(() => (own()?.memoryEpoch ? "Written " + startedAt(own().memoryEpoch) : "No notes yet"))
+        .font(10).color("tertiary").lineLimit(1).truncation("tail")),
+    ]),
+    when(() => Boolean(own()?.canStart), "update", () =>
+      textButton("Update", "Have the project agent bring the memory up to date", () =>
+        wheelhouse.agent(project(), { role: "project", update: true }))),
+    textButton("Open", "Open the memory as a tab", () => wheelhouse.memory(project())),
+  ])
+    .paddingHorizontal(10).paddingVertical(7)
+    .cornerRadius(8)
+    .background(CARD)
+    .frame({ maxWidth: "infinity" });
+}
+
+function projectAgent() {
+  return [
+    when(() => Boolean(own()), "head", () =>
+      HStack({ spacing: 6 }, [
+        Image("steeringwheel").font(12).color("secondary"),
+        Text("Project agent").font(14).weight("semibold").lineLimit(1),
+        Spacer(),
+      ]).paddingHorizontal(4)),
+    when(() => Boolean(own()?.canStart) && (own()?.harnesses ?? []).length > 0, "harness", () =>
+      HStack({ spacing: 6 }, [
+        Text("Agents start on").font(11).color("secondary").lineLimit(1),
+        Spacer({ minLength: 0 }),
+        harnessMenu(),
+      ]).paddingHorizontal(4)),
+    when(() => Boolean(own()?.running), "running", () => ownRunning()),
+    when(() => Boolean(own()) && !own().running && !own().unavailable, "stopped", () => ownStopped()),
+    when(() => Boolean(own()?.unavailable), "unavailable", () =>
+      line(Text(() => own()?.unavailable ?? "").font(11).color("tertiary").lineLimit(3)).paddingHorizontal(4)),
+    when(() => Boolean(own()), "memory", () => memoryRow()),
+  ];
 }
 
 function earlierSessions() {
@@ -192,14 +329,20 @@ function earlierSessions() {
 
 function panel() {
   return VStack({ spacing: 8 }, [
+    line(Text(() => project()?.title ?? "").font(11).color("secondary").lineLimit(1).truncation("tail"))
+      .paddingHorizontal(4),
+    ...(CAN_START ? projectAgent() : []),
     HStack({ spacing: 6 }, [
       Text("Agents").font(14).weight("semibold"),
       Text(() => (agents().length ? String(agents().length) : "")).font(12).color("secondary"),
       Spacer(),
+      ...(CAN_START
+        ? [when(() => Boolean(own()?.canStart), "new", () =>
+            textButton("New agent", "Start an agent that reads the project's brief and memory, then waits for a task", () =>
+              wheelhouse.agent(project(), { role: "agent" })))]
+        : []),
       ...(IN_WHEELHOUSE ? [iconButton("sidebar.right", "Collapse to the Agents button", () => setCollapsed(true))] : []),
-    ]).paddingHorizontal(4),
-    line(Text(() => project()?.title ?? "").font(11).color("secondary").lineLimit(1).truncation("tail"))
-      .paddingHorizontal(4),
+    ]).paddingHorizontal(4).paddingTop(CAN_START ? 10 : 0),
     ForEach({ items: agents, key: (e) => e.key }, (e) => agentCard(e)),
     when(() => agents().length === 0, "none", () =>
       line(Text("No agent is running in this project.").font(11).color("tertiary")).paddingHorizontal(4)),

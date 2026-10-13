@@ -48,6 +48,12 @@ DONE              —
   harness's own resume command, and each has a `wheelhouse://` link to paste elsewhere. Claude
   Code and Codex are recognised as they come; any other harness takes a few lines of JSON.
   Sessions on Linux SSH hosts are kept and resumed the same way, in a terminal on the host.
+- **A project agent, and a memory per project.** Each project has an agent of its own, started
+  from the Agents panel on the harness you use. It is given a brief of the project (lane, links,
+  repositories, earlier sessions) and keeps a short memory of what was decided and learned.
+  **New agent** starts any other agent with that brief and memory, so it is ready for a task
+  without being told the background again. Both are ordinary sessions of your harness in the
+  project's folder: they follow its `CLAUDE.md` or `AGENTS.md` and use your skills.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
@@ -141,6 +147,11 @@ sidebar, and an **Example Project** to look around in.
    earlier sessions: **Resume** opens one again in a new tab, and the link button copies a
    `wheelhouse://` link to it.
 
+   At the top of the panel is the project's own agent. Pick your harness in its menu once, then
+   **Start with …**: it reads the project's brief, brings the project's memory up to date and
+   tells you where the project stands. **New agent** starts another agent that has read both
+   and waits for your task.
+
    <p align="center">
      <img src="wheelhouse/docs/images/agents-panel.png" width="320" alt="The Agents panel on the right of a project: one agent, and under it four earlier sessions, each with its harness, first prompt, a Resume button and a link button">
    </p>
@@ -183,8 +194,7 @@ What we plan to work on next, roughly in this order within each area.
 
 **Project board**
 
-- A project agent: one agent per project that knows the project's links, repositories and
-  lane, and can be asked to move the work along.
+- Agents started from the panel on SSH hosts; today they start on this Mac only.
 
 **Later**
 

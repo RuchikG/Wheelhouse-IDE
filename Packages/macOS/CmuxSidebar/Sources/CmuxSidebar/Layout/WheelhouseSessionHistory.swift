@@ -23,12 +23,18 @@ public struct WheelhouseSessionRecord: Codable, Equatable, Sendable {
     public var directory: String?
     /// The shell command that reopens the session.
     public var resume: String?
+    /// `project` for a session of the project's own agent; absent for any other.
+    public var role: String?
+    /// The file the harness keeps the session's conversation in, where the app knows it.
+    public var transcript: String?
 
     public init(
         id: String, kind: String, name: String, sessionId: String? = nil, title: String? = nil,
         startedAt: Double, lastSeenAt: Double, endedAt: Double? = nil, host: String? = nil,
-        directory: String? = nil, resume: String? = nil
+        directory: String? = nil, resume: String? = nil, role: String? = nil, transcript: String? = nil
     ) {
+        self.role = role
+        self.transcript = transcript
         self.id = id
         self.kind = kind
         self.name = name
@@ -54,11 +60,17 @@ public struct WheelhouseSessionObservation: Equatable, Sendable {
     public var host: String?
     public var directory: String?
     public var resume: String?
+    /// Set once the app knows the session is the project's own agent.
+    public var role: String?
+    public var transcript: String?
 
     public init(
         id: String, kind: String, name: String, sessionId: String? = nil, title: String? = nil,
-        host: String? = nil, directory: String? = nil, resume: String? = nil
+        host: String? = nil, directory: String? = nil, resume: String? = nil, role: String? = nil,
+        transcript: String? = nil
     ) {
+        self.role = role
+        self.transcript = transcript
         self.id = id
         self.kind = kind
         self.name = name
@@ -111,7 +123,8 @@ public struct WheelhouseSessionHistory: Equatable, Sendable {
                     id: observation.sessionId == nil ? "\(observation.id)@\(Int(now))" : observation.id,
                     kind: observation.kind, name: observation.name, sessionId: observation.sessionId,
                     title: observation.title, startedAt: now, lastSeenAt: now, host: observation.host,
-                    directory: observation.directory, resume: observation.resume))
+                    directory: observation.directory, resume: observation.resume, role: observation.role,
+                    transcript: observation.transcript))
                 changed = true
             }
         }
@@ -144,6 +157,14 @@ public struct WheelhouseSessionHistory: Equatable, Sendable {
 
     public func record(id: String) -> WheelhouseSessionRecord? {
         records.first { $0.id == id }
+    }
+
+    /// The project agent's session that is running, and its latest one that has ended.
+    public var projectAgent: (running: WheelhouseSessionRecord?, last: WheelhouseSessionRecord?) {
+        let own = records.filter { $0.role == WheelhouseProjectAgent.role }
+        return (
+            own.last { $0.endedAt == nil },
+            own.filter { $0.endedAt != nil }.max { ($0.endedAt ?? 0) < ($1.endedAt ?? 0) })
     }
 
     /// A session without an id of its own is a new session each time its slot fills.
@@ -185,6 +206,14 @@ public struct WheelhouseSessionHistory: Equatable, Sendable {
             record.directory = directory
             changed = true
         }
+        if let role = observation.role, record.role != role {
+            record.role = role
+            changed = true
+        }
+        if let transcript = observation.transcript, record.transcript != transcript {
+            record.transcript = transcript
+            changed = true
+        }
         if now - record.lastSeenAt >= Self.saveInterval { changed = true }
         record.lastSeenAt = now
         return changed
@@ -198,10 +227,13 @@ public struct WheelhouseSessionList: Equatable, Sendable {
     /// The project file's name without its extension.
     public let project: String
     public let records: [WheelhouseSessionRecord]
+    /// The project's own agent and what agents are started with (`workspaces[i].projectAgent`).
+    public let agent: WheelhouseProjectAgent?
 
-    public init(project: String, records: [WheelhouseSessionRecord]) {
+    public init(project: String, records: [WheelhouseSessionRecord], agent: WheelhouseProjectAgent? = nil) {
         self.project = project
         self.records = records
+        self.agent = agent
     }
 
     public var values: [SwiftValue] {
@@ -219,6 +251,7 @@ public struct WheelhouseSessionList: Equatable, Sendable {
             if let title = record.title, !title.isEmpty { fields["title"] = .string(title) }
             if let host = record.host { fields["host"] = .string(host) }
             if let directory = record.directory { fields["directory"] = .string(directory) }
+            if let role = record.role { fields["role"] = .string(role) }
             return .object(fields)
         }
     }
@@ -251,9 +284,15 @@ public enum WheelhouseSessionLink {
 public enum WheelhouseProjectFile {
     /// The project's name: the value of the top-level `name` key.
     public static func name(in text: String) -> String? {
+        value(of: "name", in: text)
+    }
+
+    /// The value of a top-level key that holds one line of text, also in `config.yaml`.
+    public static func value(of key: String, in text: String) -> String? {
+        let prefix = key + ":"
         for line in text.split(whereSeparator: \.isNewline) {
-            guard line.hasPrefix("name:") else { continue }
-            var value = line.dropFirst("name:".count).trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix(prefix) else { continue }
+            var value = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
             if let quote = value.first, quote == "\"" || quote == "'" {
                 value.removeFirst()
                 if let end = value.firstIndex(of: quote) { value = String(value[..<end]) }

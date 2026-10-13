@@ -63,7 +63,8 @@ Wheelhouse IDE; click it to open it again. From a terminal that is `proj open <p
 
 To take a closed project off the board, right-click it under **Closed** and choose **Remove from
 board**, or run `proj rm <project>`. Its file moves to `~/.config/wheelhouse/archive`, together
-with the record of its agent sessions (`<project>.sessions.json`), and nothing reads that
+with the record of its agent sessions (`<project>.sessions.json`) and its memory
+(`<project>.memory.md`), and nothing reads that
 folder. Worktrees stay where they are; run `proj wt rm <project>` first to remove them. To bring
 a project back, move its file into `projects` again, and its sessions file to
 `sessions/<project>.json`.
@@ -98,6 +99,13 @@ proj ls                    projects with their lane, workspace and checkouts
 proj lane <project> <design|dev|review|release|done>
 proj lane pull             copy lane moves made on the board back into the project files
 proj rm <project>          take a closed project off the board; its file moves to the archive
+proj brief <project>       write the project's brief for its agents, create its memory file
+                           when there is none, and print where both are
+proj harness               the harness agents are started on from the Agents panel
+proj harness set [<project>] <harness>
+                           set it for every project, or for one project
+proj harness clear [<project>]
+                           remove that setting
 proj link [<project>]      a project's links, one line per link kind
 proj link [<project>] <kind> <url>
                            set a project's link of that kind
@@ -125,6 +133,7 @@ as `_example.yaml`. The file name is the project's id on the command line; files
 | `repos` | Repositories: `path`, and optionally `branch`, `base`, `worktree` |
 | `links` | Pages shown as chips on the card: `title` (a link kind), `url`, and optionally `icon` to replace the kind's |
 | `agents` | Terminals started with the workspace: `name`, `command`, optional `dir` |
+| `harness` | The harness this project's agents are started on from the Agents panel, when it is not the one in `config.yaml` |
 | `location`, `host` | `remote` opens the project as a `cmux ssh <host>` workspace |
 
 ## Links
@@ -202,6 +211,7 @@ never switched or modified.
 | `remote_host` | none | `WHEELHOUSE_REMOTE_HOST` |
 | `remote_agent_dir` | the workspace directory | `WHEELHOUSE_REMOTE_AGENT_DIR` |
 | `link_kinds` | PRD, Tech Solution, Tech Design, Tracker, Pipeline | none |
+| `harness` | the first harness with a start command | none |
 
 `link_kinds` is a list of `title` and optional `icon`, an
 [SF Symbol](https://developer.apple.com/sf-symbols/) name such as `ticket`. Without an icon, one

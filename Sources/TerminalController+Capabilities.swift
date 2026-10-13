@@ -283,6 +283,8 @@ extension TerminalController {
             "wheelhouse.agents_panel.set",
             "wheelhouse.session.open",
             "wheelhouse.remote_folder.open",
+            "wheelhouse.agent.start",
+            "wheelhouse.agent.memory",
             "feedback.open",
             "feedback.submit",
             "feed.push",

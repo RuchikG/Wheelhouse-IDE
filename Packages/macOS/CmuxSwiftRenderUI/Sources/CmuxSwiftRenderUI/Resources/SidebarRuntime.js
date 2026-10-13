@@ -476,8 +476,9 @@
   g.openURL = (url) => __host_action(JSON.stringify({ kind: "openURL", url: String(url) }));
   g.log = (message) => __host_action(JSON.stringify({ kind: "log", message: String(message) }));
   // Wheelhouse IDE: how a sidebar tells this app from cmux, its New Project form, the
-  // board's `proj`, run by the app without a workspace, collapsing the Agents panel, and
-  // resuming an earlier session of a project or copying its link.
+  // board's `proj`, run by the app without a workspace, collapsing the Agents panel,
+  // resuming an earlier session of a project or copying its link, starting a project's
+  // agents and opening its memory.
   g.wheelhouse = {
     newProject: () => g.cmux("wheelhouse.project.new", {}),
     proj: (args, options) => g.cmux("wheelhouse.proj.run", {
@@ -493,6 +494,13 @@
       id: String(session?.id ?? ""),
       copy_link: options?.copyLink ? "true" : "false",
     }),
+    agent: (workspace, options) => g.cmux("wheelhouse.agent.start", {
+      workspace_id: String(workspace?.id ?? ""),
+      role: options?.role ?? "project",
+      harness: options?.harness ?? "",
+      update: options?.update ? "true" : "false",
+    }),
+    memory: (workspace) => g.cmux("wheelhouse.agent.memory", { workspace_id: String(workspace?.id ?? "") }),
   };
 
   // ---------------------------------------------------------------------

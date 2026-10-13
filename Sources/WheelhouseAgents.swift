@@ -235,6 +235,13 @@ enum WheelhouseSessions {
     /// Project name → the project file's name without its extension.
     private static var projects: [String: String] = [:]
     private static var histories: [String: WheelhouseSessionHistory] = [:]
+    /// The harness a project file names for its agents, and the one for every project.
+    private static var ownHarness: [String: String] = [:]
+    private static var everyProjectHarness: String?
+    /// When each project's memory was last written; none while it holds no notes.
+    private static var memoryWrittenAt: [String: Double] = [:]
+    /// The tab each running session of a project is in, by the record's id.
+    private static var panels: [String: [String: UUID]] = [:]
 
     static var home: URL {
         if let home = ProcessInfo.processInfo.environment["WHEELHOUSE_HOME"], !home.isEmpty {
@@ -250,7 +257,39 @@ enum WheelhouseSessions {
 
     static func list(for workspace: Workspace) -> WheelhouseSessionList {
         guard let project = project(of: workspace) else { return .empty }
-        return WheelhouseSessionList(project: project, records: history(project).earlier(limit: listed))
+        let history = history(project)
+        return WheelhouseSessionList(
+            project: project, records: history.earlier(limit: listed), agent: agent(of: project, in: workspace, history: history))
+    }
+
+    /// The harness the project's agents are started on.
+    static func harnessToStart(for project: String) -> WheelhouseHarness? {
+        WheelhouseHarness.toStart(
+            project: ownHarness[project], everyProject: everyProjectHarness, from: WheelhouseHarnessScan.all)
+    }
+
+    static func memoryFile(_ project: String) -> URL {
+        home.appendingPathComponent("memory", isDirectory: true).appendingPathComponent("\(project).md")
+    }
+
+    /// The tab a running session of a project is in, when it runs on this Mac.
+    static func panel(ofRecord id: String, project: String) -> UUID? {
+        panels[project]?[id]
+    }
+
+    static func projectAgentSessions(of project: String) -> (running: WheelhouseSessionRecord?, last: WheelhouseSessionRecord?) {
+        history(project).projectAgent
+    }
+
+    private static func agent(of project: String, in workspace: Workspace, history: WheelhouseSessionHistory) -> WheelhouseProjectAgent {
+        let own = history.projectAgent
+        return WheelhouseProjectAgent(
+            harness: harnessToStart(for: project),
+            harnesses: WheelhouseHarnessScan.all.filter { $0.start?.contains("{prompt}") == true },
+            hasOwnHarness: ownHarness[project] != nil,
+            running: own.running, runningPanel: own.running.flatMap { panels[project]?[$0.id] }, last: own.last,
+            memoryPath: memoryFile(project).path, memoryWrittenAt: memoryWrittenAt[project],
+            unavailable: workspace.remoteDisplayTarget == nil ? nil : WheelhouseProjectAgents.remoteNotice)
     }
 
     static func tick() {
@@ -303,6 +342,7 @@ enum WheelhouseSessions {
         if record.endedAt == nil {
             let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: workspace.id, unreadCount: 0).agents
             if let panel = agents.first(where: { $0.sessionId == record.sessionId })?.panelId
+                ?? project(of: workspace).flatMap({ panels[$0]?[record.id] })
                 ?? record.sessionId.flatMap({ WheelhouseRemoteSessionScan.panel(ofSession: $0, in: workspace) }) {
                 workspace.focusPanel(panel)
             }
@@ -337,12 +377,25 @@ enum WheelhouseSessions {
         let folder = home.appendingPathComponent("projects", isDirectory: true)
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         var found: [String: String] = [:]
+        var harnesses: [String: String] = [:]
+        var written: [String: Double] = [:]
         for file in files where file.pathExtension == "yaml" && !file.lastPathComponent.hasPrefix("_") {
             guard let text = try? String(contentsOf: file, encoding: .utf8),
                   let name = WheelhouseProjectFile.name(in: text) else { continue }
-            found[name] = file.deletingPathExtension().lastPathComponent
+            let project = file.deletingPathExtension().lastPathComponent
+            found[name] = project
+            harnesses[project] = WheelhouseProjectFile.value(of: "harness", in: text)
+            let memory = memoryFile(project)
+            if let notes = try? String(contentsOf: memory, encoding: .utf8), WheelhouseProjectAgent.hasNotes(memory: notes),
+               let date = (try? FileManager.default.attributesOfItem(atPath: memory.path))?[.modificationDate] as? Date {
+                written[project] = date.timeIntervalSince1970
+            }
         }
         projects = found
+        ownHarness = harnesses
+        memoryWrittenAt = written
+        everyProjectHarness = (try? String(contentsOf: home.appendingPathComponent("config.yaml"), encoding: .utf8))
+            .flatMap { WheelhouseProjectFile.value(of: "harness", in: $0) }
         // A project taken off the board takes its sessions along; a later one of the same
         // name starts without them.
         let kept = Set(found.values)
@@ -368,14 +421,18 @@ enum WheelhouseSessions {
         // Sessions restored at launch take a moment to show up again.
         let complete = now.timeIntervalSince(launchedAt) > 20
         var live: [String: [WheelhouseSessionObservation]] = [:]
+        var tabs: [String: [String: UUID]] = [:]
         // Projects whose host has not said yet which of its sessions are running.
         var unsettled: Set<String> = []
         for workspace in manager.tabs {
             guard let project = project(of: workspace) else { continue }
             let observed = observations(in: workspace, index: index)
             live[project, default: []] += observed.sessions
+            tabs[project, default: [:]].merge(observed.panels) { _, new in new }
             if !observed.isComplete { unsettled.insert(project) }
         }
+        panels = tabs
+        WheelhouseProjectAgents.forget(tabsNotIn: manager.tabs.flatMap { $0.panels.keys })
         for project in Set(projects.values) {
             var history = history(project)
             guard history.observe(
@@ -395,13 +452,13 @@ enum WheelhouseSessions {
     /// not listed may still be running: its host has not answered, or not lately.
     private static func observations(
         in workspace: Workspace, index: RestorableAgentSessionIndex?
-    ) -> (sessions: [WheelhouseSessionObservation], isComplete: Bool) {
+    ) -> (sessions: [WheelhouseSessionObservation], isComplete: Bool, panels: [String: UUID]) {
         let host = workspace.remoteDisplayTarget
         if host != nil {
             // The host knows its sessions' ids, which the app's own view of a remote terminal lacks.
             switch WheelhouseRemoteSessionScan.answer(for: workspace) {
             case .pending:
-                return ([], false)
+                return ([], false, [:])
             case .sessions(let sessions, let isCurrent):
                 let observed = sessions.map { session in
                     WheelhouseSessionObservation(
@@ -409,13 +466,14 @@ enum WheelhouseSessions {
                         title: session.title, host: host, directory: session.directory,
                         resume: session.harness.resumeCommand(id: session.id))
                 }
-                return (observed, isCurrent)
+                return (observed, isCurrent, [:])
             case .unavailable:
                 break
             }
         }
         var found: [WheelhouseSessionObservation] = []
         var position: [String: Int] = [:]
+        var tabs: [String: UUID] = [:]
         let agents = workspace.customSidebarWorkspaceSnapshot(index: 0, selectedId: nil, unreadCount: 0).agents
         for agent in agents where agent.status != "ended" && !agent.sessionId.hasPrefix("pending-") {
             if agent.sessionId.hasPrefix("remote:") {
@@ -428,6 +486,7 @@ enum WheelhouseSessions {
                 .flatMap { $0.sessionId == agent.sessionId ? $0 : nil }
             let harness = WheelhouseHarnessScan.harness(id: agent.kind)
             position[agent.sessionId] = found.count
+            tabs[agent.sessionId] = agent.panelId
             found.append(WheelhouseSessionObservation(
                 id: agent.sessionId, kind: agent.kind,
                 name: harness?.name ?? indexed?.registration?.name ?? indexed?.kind.displayName ?? agent.name,
@@ -435,9 +494,10 @@ enum WheelhouseSessions {
                 title: agent.title ?? WheelhouseHarnessScan.title(transcript: agent.transcriptPath, session: agent.sessionId),
                 host: host, directory: agent.workingDirectory ?? indexed?.workingDirectory,
                 resume: host != nil ? nil : harness?.resumeCommand(id: agent.sessionId)
-                    ?? resumeCommand(kind: agent.kind, sessionId: agent.sessionId, registration: indexed?.registration)))
+                    ?? resumeCommand(kind: agent.kind, sessionId: agent.sessionId, registration: indexed?.registration),
+                transcript: host != nil ? nil : agent.transcriptPath))
         }
-        guard host == nil else { return (found, true) }
+        guard host == nil else { return (found, true, [:]) }
         var terminals: [UUID] = []
         for pane in workspace.bonsplitController.allPaneIds {
             for tab in workspace.bonsplitController.tabs(inPane: pane) {
@@ -452,7 +512,9 @@ enum WheelhouseSessions {
                 let observation = WheelhouseSessionObservation(
                     id: session.id, kind: session.harness.id, name: session.harness.name, sessionId: session.id,
                     title: seen?.title ?? session.title, directory: seen?.directory ?? session.directory,
-                    resume: session.harness.resumeCommand(id: session.id) ?? seen?.resume)
+                    resume: session.harness.resumeCommand(id: session.id) ?? seen?.resume,
+                    transcript: seen?.transcript ?? session.transcript)
+                tabs[session.id] = panel
                 if let index = position[session.id] {
                     found[index] = observation
                 } else {
@@ -462,12 +524,12 @@ enum WheelhouseSessions {
             }
         }
         // Agents only cmux can tell apart.
-        guard let index else { return (found, true) }
         for panel in terminals {
-            guard let entry = index.exactEntry(workspaceId: workspace.id, panelId: panel),
+            guard let entry = index?.exactEntry(workspaceId: workspace.id, panelId: panel),
                   entry.processLiveness == .running, position[entry.snapshot.sessionId] == nil else { continue }
             let snapshot = entry.snapshot
             position[snapshot.sessionId] = found.count
+            tabs[snapshot.sessionId] = panel
             found.append(WheelhouseSessionObservation(
                 id: snapshot.sessionId, kind: snapshot.kind.rawValue,
                 name: snapshot.registration?.name ?? snapshot.kind.displayName, sessionId: snapshot.sessionId,
@@ -475,7 +537,13 @@ enum WheelhouseSessions {
                 resume: resumeCommand(
                     kind: snapshot.kind.rawValue, sessionId: snapshot.sessionId, registration: snapshot.registration)))
         }
-        return (found, true)
+        // A session in the tab the project agent was started in is the project agent's.
+        for index in found.indices {
+            guard let panel = tabs[found[index].id], WheelhouseProjectAgents.isProjectAgent(panel, session: found[index].id)
+            else { continue }
+            found[index].role = WheelhouseProjectAgent.role
+        }
+        return (found, true, tabs)
     }
 
     /// The harness's own way back into a session, from its kind and session id alone: the
@@ -485,6 +553,147 @@ enum WheelhouseSessions {
         return SessionRestorableAgentSnapshot(
             kind: kind, sessionId: sessionId, workingDirectory: nil, launchCommand: nil, registration: registration
         ).resumeCommand(includeWorkingDirectoryPrefix: false)
+    }
+}
+
+/// Starts a project's agents from the Agents panel: the project's own agent, which keeps the
+/// project's memory, and any other agent, which is given the brief and the memory to read.
+/// Each is the harness's ordinary session in the project's folder, in a new tab, whose first
+/// message names the brief `proj brief` has just written.
+@MainActor
+enum WheelhouseProjectAgents {
+    enum Role: String {
+        case project
+        case agent
+    }
+
+    static var remoteNotice: String {
+        String(
+            localized: "wheelhouse.projectAgent.remote",
+            defaultValue: "Agents are started from here on this Mac only; this project is on an SSH host.")
+    }
+
+    /// The tabs the project agent was started in, and the session found in each.
+    private static var started: [UUID: String?] = [:]
+
+    static func isProjectAgent(_ panel: UUID, session: String) -> Bool {
+        guard let known = started[panel] else { return false }
+        if let known { return known == session }
+        started[panel] = session
+        return true
+    }
+
+    static func forget(tabsNotIn open: [UUID]) {
+        guard !started.isEmpty else { return }
+        let open = Set(open)
+        started = started.filter { open.contains($0.key) }
+    }
+
+    /// Starts an agent in `workspace`'s project, or goes to the project agent when it runs.
+    /// With `update`, the project agent is asked to bring the memory up to date. Returns why
+    /// nothing was started, in the user's words.
+    @discardableResult
+    static func start(in workspace: Workspace, role: Role, harness id: String? = nil, update: Bool = false) -> String? {
+        guard let project = WheelhouseSessions.project(of: workspace) else {
+            return String(localized: "wheelhouse.projectAgent.noProject", defaultValue: "This workspace is not a project on the board.")
+        }
+        guard workspace.remoteDisplayTarget == nil else { return remoteNotice }
+        let running = role == .project
+            ? WheelhouseSessions.projectAgentSessions(of: project).running
+                .flatMap { WheelhouseSessions.panel(ofRecord: $0.id, project: project) }
+                .flatMap { workspace.panels[$0] == nil ? nil : $0 }
+            : nil
+        if let running, !update {
+            workspace.focusPanel(running)
+            return nil
+        }
+        let harness = id.flatMap { id in WheelhouseHarnessScan.all.first { $0.id == id } }
+            ?? WheelhouseSessions.harnessToStart(for: project)
+        guard let harness, harness.start != nil else {
+            return String(
+                localized: "wheelhouse.projectAgent.noHarness",
+                defaultValue: "No harness has a start command. Give one a \"start\" line in harnesses.json.")
+        }
+        Task { @MainActor in
+            let outcome = await WheelhouseProjects.run(["brief", project], home: WheelhouseSessions.home.path)
+            let fields = briefFields(outcome.output)
+            guard outcome.succeeded, let brief = fields["brief"] else {
+                show(failure: outcome.message)
+                return
+            }
+            if let running {
+                workspace.focusPanel(running)
+                // The text and Return are sent apart: an agent's editor takes a carriage
+                // return that arrives with pasted text as a line break.
+                guard let terminal = workspace.terminalPanel(for: running),
+                      terminal.sendText(WheelhouseProjectAgent.Prompt.update(brief: brief)) else { return }
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                _ = terminal.sendNamedKey("enter")
+                return
+            }
+            let name = fields["name"] ?? project
+            let prompt = role == .project
+                ? WheelhouseProjectAgent.Prompt.projectAgent(name: name, brief: brief)
+                : WheelhouseProjectAgent.Prompt.agent(name: name, brief: brief)
+            guard let command = harness.startCommand(prompt: prompt),
+                  let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+            else { return }
+            var directory = fields["dir"].flatMap { $0.isEmpty ? nil : $0 }
+            if let path = directory, !FileManager.default.fileExists(atPath: path) { directory = nil }
+            guard let panel = workspace.newTerminalSurface(
+                inPane: pane, focus: true, workingDirectory: directory, initialInput: command + "\n"
+            ) else { return }
+            if role == .project {
+                started[panel.id] = .some(nil)
+                workspace.setPanelCustomTitle(
+                    panelId: panel.id,
+                    title: String(localized: "wheelhouse.projectAgent.tab", defaultValue: "Project agent"))
+            }
+        }
+        return nil
+    }
+
+    /// Opens the project's memory as an editor tab, creating the file first when it is missing.
+    @discardableResult
+    static func openMemory(in workspace: Workspace) -> Bool {
+        guard let project = WheelhouseSessions.project(of: workspace) else { return false }
+        Task { @MainActor in
+            let path = WheelhouseSessions.memoryFile(project).path
+            if !FileManager.default.fileExists(atPath: path) {
+                let outcome = await WheelhouseProjects.run(["brief", project], home: WheelhouseSessions.home.path)
+                guard outcome.succeeded else {
+                    show(failure: outcome.message)
+                    return
+                }
+            }
+            guard let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+            else { return }
+            _ = workspace.openFilePreviewSurfaces(inPane: pane, filePaths: [path], focus: true, reuseExisting: true)
+        }
+        return true
+    }
+
+    /// What `proj brief` printed: a name and a value per line, with a tab between them.
+    private static func briefFields(_ output: String) -> [String: String] {
+        var fields: [String: String] = [:]
+        for line in output.split(separator: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+            if parts.count == 2 { fields[String(parts[0])] = String(parts[1]) }
+        }
+        return fields
+    }
+
+    private static func show(failure message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            localized: "wheelhouse.projectAgent.failed", defaultValue: "The agent was not started.")
+        alert.informativeText = message
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window) { _ in }
+        } else {
+            alert.runModal()
+        }
     }
 }
 
@@ -614,11 +823,13 @@ enum WheelhouseHarnessScan {
         let harness: WheelhouseHarness
         let directory: String?
         let title: String?
+        let transcript: String?
     }
 
     private struct Known {
         var id: String?
         var file: String?
+        var transcript: String?
         var title: String?
         var lookedAt = Date.distantPast
     }
@@ -652,7 +863,9 @@ enum WheelhouseHarnessScan {
                 known[key] = entry
             }
             guard let id = entry.id else { return nil }
-            return Session(id: id, harness: agent.harness, directory: agent.process.directory, title: entry.title)
+            return Session(
+                id: id, harness: agent.harness, directory: agent.process.directory, title: entry.title,
+                transcript: entry.transcript)
         }
     }
 
@@ -683,6 +896,7 @@ enum WheelhouseHarnessScan {
         guard entry.title == nil, let id = entry.id else { return }
         let transcript = entry.file
             ?? process.directory.flatMap { program.transcriptPath(id: id, directory: $0) }.map(expand)
+        entry.transcript = transcript
         entry.title = transcript.flatMap(firstPrompt(inFile:))
     }
 
@@ -770,5 +984,42 @@ enum WheelhouseHarnessScan {
             index += 1
         }
         return arguments
+    }
+}
+
+extension TerminalController {
+    /// The project workspace a `wheelhouse.agent.*` call means: `workspace_id`, else the selected one.
+    @MainActor
+    func v2WheelhouseProjectWorkspace(params: [String: Any]) -> Workspace? {
+        guard let tabManager = v2ResolveTabManager(params: params),
+              let workspace = v2ResolveWorkspace(params: params, tabManager: tabManager),
+              WheelhouseSessions.project(of: workspace) != nil else { return nil }
+        return workspace
+    }
+
+    /// `wheelhouse.agent.start`: starts the project's own agent (`role` = `project`, the default)
+    /// or another agent (`agent`) on `harness`, or on the project's harness without one. With
+    /// `update`, a running project agent is asked to bring the memory up to date. The harness
+    /// is named by its id and its command comes from the harness list, so no command is taken
+    /// from the caller.
+    @MainActor
+    func v2WheelhouseAgentStart(params: [String: Any]) -> V2CallResult {
+        guard let workspace = v2WheelhouseProjectWorkspace(params: params) else {
+            return .err(code: "not_found", message: "that workspace is not a project", data: nil)
+        }
+        let role = (params["role"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? WheelhouseProjectAgents.Role.project.rawValue
+        guard let role = WheelhouseProjectAgents.Role(rawValue: role) else {
+            return .err(code: "invalid_params", message: "role must be project or agent", data: nil)
+        }
+        let harness = (params["harness"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        if let harness, !WheelhouseHarnessScan.all.contains(where: { $0.id == harness && $0.start != nil }) {
+            return .err(code: "invalid_params", message: "no harness \(harness) with a start command", data: nil)
+        }
+        if let refusal = WheelhouseProjectAgents.start(
+            in: workspace, role: role, harness: harness, update: v2Bool(params, "update") ?? false
+        ) {
+            return .err(code: "unavailable", message: refusal, data: nil)
+        }
+        return .ok(["started": true, "role": role.rawValue])
     }
 }

@@ -11,8 +11,9 @@ import (
 // archiveDir holds the files of projects taken off the board. Nothing reads it.
 const archiveDir = "archive"
 
-// archiveProject moves a project's file, and the record of its agent sessions when it has
-// one, into <home>/archive and returns where the project file went. A name already taken
+// archiveProject moves a project's file, and the record of its agent sessions and its memory
+// when it has them, into <home>/archive and returns where the project file went. Its brief
+// is removed: it is written from the other three. A name already taken
 // there gets a number, so an earlier project of the same name is kept.
 func archiveProject(home string, m *Manifest) (string, error) {
 	dir := filepath.Join(home, archiveDir)
@@ -22,7 +23,7 @@ func archiveProject(home string, m *Manifest) (string, error) {
 	stem := m.Slug
 	for n := 2; ; n++ {
 		taken := false
-		for _, suffix := range []string{".yaml", ".sessions.json"} {
+		for _, suffix := range []string{".yaml", ".sessions.json", ".memory.md"} {
 			if _, err := os.Lstat(filepath.Join(dir, stem+suffix)); err == nil {
 				taken = true
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -36,6 +37,12 @@ func archiveProject(home string, m *Manifest) (string, error) {
 	}
 	sessions := filepath.Join(home, "sessions", m.Slug+".json")
 	if err := os.Rename(sessions, filepath.Join(dir, stem+".sessions.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if err := os.Rename(memoryPath(home, m.Slug), filepath.Join(dir, stem+".memory.md")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if err := os.Remove(briefPath(home, m.Slug)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
 	dst := filepath.Join(dir, stem+".yaml")

@@ -28,8 +28,15 @@ const usage = `proj - project workspaces on cmux
                              turn an existing workspace (default: the current one) into the project's workspace
   proj lane <project> <lane> move a project to a lane (manifest and board)
   proj lane pull             copy lane moves made on the board back into the manifests
-  proj rm <project>          take a closed project off the board; its file and its session
-                             history move to <home>/archive
+  proj rm <project>          take a closed project off the board; its file, its session
+                             history and its memory move to <home>/archive
+  proj brief <project>       write the project's brief for its agents, create its memory file when
+                             there is none, and print where both are
+  proj harness               show the harness agents are started on from the Agents panel
+  proj harness set [<project>] <harness>
+                             set it for every project, or for one project
+  proj harness clear [<project>]
+                             remove that setting
   proj link [<project>]      show a project's links, one per link kind
   proj link [<project>] <kind> <url>
                              set a project's link of that kind (the chip on its card)
@@ -46,6 +53,7 @@ Settings live in <home>/config.yaml (all optional); a WHEELHOUSE_* variable over
   agent_dir                    where agents start (default: the workspace directory) WHEELHOUSE_AGENT_DIR
   remote_host                  ssh destination for remote projects without a host    WHEELHOUSE_REMOTE_HOST
   remote_agent_dir             where agents start on the remote host                 WHEELHOUSE_REMOTE_AGENT_DIR
+  harness                      the harness agents are started on from the Agents panel
   link_kinds                   the links a project can carry: a list of {title, icon}
   CMUX_BIN                     cmux CLI to drive (default: cmux on PATH, else the installed app's)
 `
@@ -100,6 +108,10 @@ func run(cmd string, args []string) error {
 		return cmdLane(all, args)
 	case "rm":
 		return cmdRemove(cfg, all, args)
+	case "brief":
+		return cmdBrief(cfg, all, args)
+	case "harness":
+		return cmdHarness(cfg, all, args)
 	case "link":
 		return cmdLink(cfg, all, args)
 	case "wt":

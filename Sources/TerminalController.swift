@@ -3150,6 +3150,14 @@ class TerminalController {
                 return v2Error(id: id, code: "not_found", message: "no such session in that project")
             }
             return v2Ok(id: id, result: ["project": project, "id": session])
+        case "wheelhouse.agent.start":
+            return v2Result(id: id, self.v2WheelhouseAgentStart(params: params))
+        case "wheelhouse.agent.memory":
+            guard let workspace = self.v2WheelhouseProjectWorkspace(params: params),
+                  WheelhouseProjectAgents.openMemory(in: workspace) else {
+                return v2Error(id: id, code: "not_found", message: "that workspace is not a project")
+            }
+            return v2Ok(id: id, result: ["opened": true])
         case "workspace.cloud_vm_terminal_ready":
             return v2Result(id: id, self.v2WorkspaceCloudVMTerminalReady(params: params))
         case "workspace.cloud_vm_bind":

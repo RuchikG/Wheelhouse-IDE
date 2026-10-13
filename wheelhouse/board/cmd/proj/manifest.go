@@ -80,15 +80,18 @@ type Manifest struct {
 	Slug string `yaml:"-"`
 	File string `yaml:"-"`
 
-	Name     string  `yaml:"name"`
-	Lane     string  `yaml:"lane"`
-	Location string  `yaml:"location"`
-	Host     string  `yaml:"host"`
-	Summary  string  `yaml:"summary"`
-	Dir      string  `yaml:"dir"`
-	Repos    []Repo  `yaml:"repos"`
-	Links    []Link  `yaml:"links"`
-	Agents   []Agent `yaml:"agents"`
+	Name     string `yaml:"name"`
+	Lane     string `yaml:"lane"`
+	Location string `yaml:"location"`
+	Host     string `yaml:"host"`
+	Summary  string `yaml:"summary"`
+	Dir      string `yaml:"dir"`
+	// Harness is the agent harness this project's agents are started on, when it is not the
+	// one from config.yaml.
+	Harness string  `yaml:"harness"`
+	Repos   []Repo  `yaml:"repos"`
+	Links   []Link  `yaml:"links"`
+	Agents  []Agent `yaml:"agents"`
 }
 
 func loadManifest(path string) (*Manifest, error) {

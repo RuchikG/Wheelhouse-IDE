@@ -20,6 +20,7 @@ type config struct {
 	agentDir       string
 	remoteHost     string
 	remoteAgentDir string
+	harness        string
 	linkKinds      []LinkKind
 }
 
@@ -29,6 +30,7 @@ type configFile struct {
 	AgentDir       string     `yaml:"agent_dir"`
 	RemoteHost     string     `yaml:"remote_host"`
 	RemoteAgentDir string     `yaml:"remote_agent_dir"`
+	Harness        string     `yaml:"harness"`
 	LinkKinds      []LinkKind `yaml:"link_kinds"`
 }
 
@@ -96,6 +98,7 @@ func loadConfig() (*config, error) {
 		agentDir:       expandHome(file.AgentDir),
 		remoteHost:     file.RemoteHost,
 		remoteAgentDir: file.RemoteAgentDir,
+		harness:        file.Harness,
 		linkKinds:      file.LinkKinds,
 	}
 	if len(cfg.linkKinds) == 0 {

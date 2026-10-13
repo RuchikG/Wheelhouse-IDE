@@ -25,11 +25,17 @@ public struct WheelhouseHarness: Codable, Equatable, Sendable {
     public var transcript: String?
     /// The command that opens a session again, with `{id}` for its id.
     public var resume: String?
+    /// The command that starts a new session with a first message, with `{prompt}` where the
+    /// message goes as one quoted argument. Without it the Agents panel cannot start this
+    /// harness.
+    public var start: String?
 
     public init(
         id: String, name: String, process: [String]? = nil, launcher: [String]? = nil, wraps: String? = nil,
-        pidFile: String? = nil, sessionFiles: String? = nil, transcript: String? = nil, resume: String? = nil
+        pidFile: String? = nil, sessionFiles: String? = nil, transcript: String? = nil, resume: String? = nil,
+        start: String? = nil
     ) {
+        self.start = start
         self.transcript = transcript
         self.id = id
         self.name = name
@@ -45,10 +51,10 @@ public struct WheelhouseHarness: Codable, Equatable, Sendable {
         WheelhouseHarness(
             id: "claude", name: "Claude Code", process: ["claude"],
             pidFile: "~/.claude/sessions/{pid}.json", transcript: "~/.claude/projects/{cwd}/{id}.jsonl",
-            resume: "claude --resume {id}"),
+            resume: "claude --resume {id}", start: "claude {prompt}"),
         WheelhouseHarness(
             id: "codex", name: "Codex", process: ["codex"],
-            sessionFiles: "~/.codex/sessions", resume: "codex resume {id}"),
+            sessionFiles: "~/.codex/sessions", resume: "codex resume {id}", start: "codex {prompt}"),
     ]
 
     /// The built-in harnesses with the user's list: an entry of the list replaces the built-in
@@ -65,6 +71,24 @@ public struct WheelhouseHarness: Codable, Equatable, Sendable {
     public func resumeCommand(id: String) -> String? {
         guard let resume, resume.contains("{id}"), Self.isPlainToken(id) else { return nil }
         return resume.replacingOccurrences(of: "{id}", with: id)
+    }
+
+    /// The command that starts a session whose first message is `prompt`, or nil without a
+    /// template. The message is quoted for the shell.
+    public func startCommand(prompt: String) -> String? {
+        guard let start, start.contains("{prompt}") else { return nil }
+        let quoted = "'" + prompt.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return start.replacingOccurrences(of: "{prompt}", with: quoted)
+    }
+
+    /// The harness agents are started on: the project's own when it can be started, else the
+    /// one for every project, else the first that can be started.
+    public static func toStart(project: String?, everyProject: String?, from harnesses: [WheelhouseHarness]) -> WheelhouseHarness? {
+        let startable = harnesses.filter { $0.start?.contains("{prompt}") == true }
+        for id in [project, everyProject] {
+            if let id, let harness = startable.first(where: { $0.id == id }) { return harness }
+        }
+        return startable.first
     }
 
     /// Where session `id`, run in `directory`, keeps its transcript.

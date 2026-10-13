@@ -6,6 +6,7 @@ lane: dev                  # design | dev | review | release | done
 location: local            # local | remote
 # host: build-box          # remote only: ssh destination (default: remote_host in config.yaml)
 summary: One line shown on the board card
+# harness: codex           # the harness agents are started on from the Agents panel (default: harness in config.yaml)
 dir: ~/code/example        # workspace directory; defaults to the first repo's checkout
 repos:
   - path: ~/code/api

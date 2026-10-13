@@ -140,6 +140,9 @@ public struct CustomSidebarDataContextBuilder {
         if !workspace.sessions.records.isEmpty {
             fields["sessions"] = .array(workspace.sessions.values)
         }
+        if let agent = workspace.sessions.agent {
+            fields["projectAgent"] = agent.value(project: workspace.sessions.project)
+        }
         return .object(fields)
     }
 

@@ -223,6 +223,32 @@ function folderMenu(w) {
   ];
 }
 
+// A project's own agent is Wheelhouse IDE's: it is started from the card's menu or the Agents
+// panel, and while it runs the card carries a wheel that goes to it.
+const CAN_START_AGENTS = IN_WHEELHOUSE && typeof wheelhouse.agent === "function";
+const ownAgentOf = (w) => (CAN_START_AGENTS ? w?.projectAgent?.running : undefined);
+
+function projectAgentMenu(w) {
+  if (!CAN_START_AGENTS) return [];
+  return [
+    Button("Project Agent", () => {
+      cmux("workspace.select", { workspace_id: w().id });
+      wheelhouse.agent(w(), { role: "project" });
+    }),
+  ];
+}
+
+function ownAgentWheel(w) {
+  const live = () => (w()?.agents ?? []).find((a) => a.panelId && a.panelId === ownAgentOf(w())?.panelId);
+  return Image("steeringwheel").font(10)
+    .color(() => (live()?.status === "needs_input" ? NEEDS : live()?.status === "idle" ? "secondary" : WORKING))
+    .help("Go to the project agent")
+    .onTap(() => {
+      cmux("workspace.select", { workspace_id: w().id });
+      wheelhouse.session(ownAgentOf(w()));
+    });
+}
+
 function saveLink(w, kind, address) {
   setEditing(null);
   const slug = project(w)?.slug;
@@ -339,6 +365,7 @@ function card(w) {
       Text(() => w()?.title ?? "")
         .font(12).weight("semibold").lineLimit(1).truncation("tail"),
       Spacer({ minLength: 0 }),
+      when(() => Boolean(ownAgentOf(w())), "own", () => ownAgentWheel(w)),
       badge(() => (w()?.remote?.target ? "remote" : ""), "#5E5CE6").layoutPriority(2),
       badge(() => (w()?.unread > 0 ? String(w().unread) : ""), "#E4573D").layoutPriority(2),
     ]),
@@ -366,6 +393,7 @@ function card(w) {
     .frame({ maxWidth: "infinity" })
     .onTap(() => jump(w()))
     .contextMenu([
+      ...projectAgentMenu(w),
       ...folderMenu(w),
       ...linkMenu(w),
       laneMenu(w, "Move to lane"),
@@ -624,7 +652,10 @@ const agentName = (e) => agentTab(e)?.title || e.a.name || e.a.kind || "agent";
 function agentTask(e) {
   const running = (e.a.children ?? []).filter((c) => c.running).length;
   const parts = [];
-  const task = e.a.title || agentTab(e)?.latestPrompt;
+  // What the Agents panel tells an agent about the project's brief is not its task.
+  const asked = (text) =>
+    (/^((Project|New) agent for .+: read |Read .+ again and bring the project memory up to date)/.test(text ?? "") ? "" : text);
+  const task = asked(e.a.title) || asked(agentTab(e)?.latestPrompt);
   if (task) parts.push(task);
   if (running) parts.push(running + (running === 1 ? " sub-agent" : " sub-agents"));
   return parts.join(" · ");

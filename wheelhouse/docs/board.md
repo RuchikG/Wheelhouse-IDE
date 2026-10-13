@@ -87,9 +87,9 @@ Design:
   ```json
   [
     {"id": "mycli", "name": "My CLI", "process": ["mycli"],
-     "sessionFiles": "~/.mycli/sessions", "resume": "mycli resume {id}"},
+     "sessionFiles": "~/.mycli/sessions", "resume": "mycli resume {id}", "start": "mycli {prompt}"},
     {"id": "kit", "name": "Kit", "launcher": ["kit"], "wraps": "claude",
-     "resume": "kit claude --resume {id}"}
+     "resume": "kit claude --resume {id}", "start": "kit claude {prompt}"}
   ]
   ```
 
@@ -100,9 +100,44 @@ Design:
   in its first line (Codex: `~/.codex/sessions`). `transcript` is where the first prompt is
   read when there is no session file. An entry with `launcher` and `wraps` is a tool that
   starts another harness: a session started through it carries its name and is resumed with
-  its command. Only the name a process was called by and its first argument are looked at,
+  its command. `start` is what the Agents panel runs to start a session (see Project agent
+  below). Only the name a process was called by and its first argument are looked at,
   and nothing of a command line is stored. The same list is used on SSH hosts, where the
   paths are the host's.
+- **Project agent.** Each project has an agent of its own at the top of the Agents panel. It is
+  an ordinary session of your harness, started in the project's folder in a new tab named
+  "Project agent", so it loads the folder's `CLAUDE.md` or `AGENTS.md` and your skills as any
+  session there does. What makes it the project's agent is its first message, which points it
+  at two files:
+
+  - **The brief,** `<home>/briefs/<project>.md`, which `proj brief <project>` writes again
+    before every start: the lane, the summary, the folder, the links, the repositories, the
+    sessions the memory has not taken in yet (with their transcript files where the app knows
+    them), the `proj` commands it can run, and the rules. The rules say to read and summarise
+    freely and to ask before anything that changes the project or leaves the machine. Asking
+    is enforced by your harness's own approval prompts, not by Wheelhouse IDE.
+  - **The memory,** `<home>/memory/<project>.md`: where the project stands, what was decided,
+    how work is done here, what is open. The project agent is the only one that writes it. It
+    brings it up to date when it starts and when you press **Update**; **Open** shows the file
+    as a tab, and you can edit it yourself.
+
+  **New agent**, next to the Agents heading, starts another agent whose first message has it
+  read the brief and the memory and then wait for your task. An agent you start by typing its
+  command in a terminal is not given either file.
+
+  The harness is yours to pick: the menu next to "Project agent" lists every harness with a
+  `start` command, sets one for this project (`harness` in the project file) or for every
+  project (`harness` in `config.yaml`); `proj harness` does the same from a terminal. Claude
+  Code and Codex have a start command built in. For another harness, add `"start"` to its
+  entry in `<home>/harnesses.json`, with `{prompt}` where the first message goes as one quoted
+  argument, such as `"start": "kit claude -m <model> {prompt}"`. A launcher that asks which
+  model to use needs the model in that command, or it stops at its question first.
+
+  While the project agent runs, its card on the board carries a wheel that goes to it, and the
+  card's menu has **Project Agent**. In a folder a harness has not seen before, its own
+  question whether to trust the folder comes first. Agents are started this way on this Mac
+  only: for a project on an SSH host the panel says so. A project taken off the board takes
+  its memory along to the archive.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip
