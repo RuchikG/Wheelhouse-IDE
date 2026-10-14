@@ -11,13 +11,49 @@ public struct WheelhouseRemoteSession: Equatable, Sendable {
     public var directory: String?
     /// What the session was asked first.
     public var title: String?
+    /// The session's transcript on the host.
+    public var transcript: String?
+    /// The role Wheelhouse started the agent in (`WheelhouseRemoteSessionProbe.roleVariable`).
+    public var role: String?
 
-    public init(id: String, harness: WheelhouseHarness, terminal: String, directory: String? = nil, title: String? = nil) {
+    public init(
+        id: String, harness: WheelhouseHarness, terminal: String, directory: String? = nil, title: String? = nil,
+        transcript: String? = nil, role: String? = nil
+    ) {
         self.id = id
         self.harness = harness
         self.terminal = terminal
         self.directory = directory
         self.title = title
+        self.transcript = transcript
+        self.role = role
+    }
+}
+
+/// A file on a host, as the probe found it.
+public struct WheelhouseRemoteFile: Equatable, Sendable {
+    public var modifiedAt: Double
+    /// Whether it holds more than the project memory's template (`WheelhouseProjectAgent.hasNotes`).
+    public var hasNotes: Bool
+
+    public init(modifiedAt: Double, hasNotes: Bool) {
+        self.modifiedAt = modifiedAt
+        self.hasNotes = hasNotes
+    }
+}
+
+/// Everything one run of the probe found on a host.
+public struct WheelhouseRemoteProbeAnswer: Equatable, Sendable {
+    public var sessions: [WheelhouseRemoteSession]
+    /// The user's home folder on the host.
+    public var home: String?
+    /// The files asked about that exist, by the path they were asked by (relative to `home`).
+    public var files: [String: WheelhouseRemoteFile]
+
+    public init(sessions: [WheelhouseRemoteSession], home: String? = nil, files: [String: WheelhouseRemoteFile] = [:]) {
+        self.sessions = sessions
+        self.home = home
+        self.files = files
     }
 }
 
@@ -31,20 +67,24 @@ public struct WheelhouseRemoteSession: Equatable, Sendable {
 public enum WheelhouseRemoteSessionProbe {
     /// The variable a host's cmux terminal gives its processes, holding the terminal's id.
     public static let terminalVariable = "CMUX_TUI_TERMINAL_ID"
+    /// The variable an agent started from the Agents panel is given, holding its role.
+    public static let roleVariable = "WHEELHOUSE_ROLE"
 
-    /// The arguments that make `python3` run the probe for `harnesses`. The program and the
-    /// harness list travel base64-encoded so no quoting of them can go wrong.
-    public static func arguments(harnesses: [WheelhouseHarness]) -> [String] {
+    /// The arguments that make `python3` run the probe for `harnesses`, also reporting the
+    /// files `files` (paths relative to the home folder). The program and the lists travel
+    /// base64-encoded so no quoting of them can go wrong.
+    public static func arguments(harnesses: [WheelhouseHarness], files: [String] = []) -> [String] {
         let list = (try? JSONEncoder().encode(harnesses)) ?? Data("[]".utf8)
+        let paths = (try? JSONEncoder().encode(files)) ?? Data("[]".utf8)
         return [
             "-c", "import base64,sys;exec(base64.b64decode(sys.argv[1]).decode())",
-            Data(script.utf8).base64EncodedString(), list.base64EncodedString(),
+            Data(script.utf8).base64EncodedString(), list.base64EncodedString(), paths.base64EncodedString(),
         ]
     }
 
     /// The remote shell command that runs the probe.
-    public static func command(harnesses: [WheelhouseHarness]) -> String {
-        "exec python3 " + arguments(harnesses: harnesses).map(shellWord).joined(separator: " ")
+    public static func command(harnesses: [WheelhouseHarness], files: [String] = []) -> String {
+        "exec python3 " + arguments(harnesses: harnesses, files: files).map(shellWord).joined(separator: " ")
     }
 
     /// `text` as one word of a POSIX shell command.
@@ -54,6 +94,11 @@ public enum WheelhouseRemoteSessionProbe {
 
     /// The sessions the probe's output describes; nil when the output is not the probe's.
     public static func sessions(inOutput output: Data, harnesses: [WheelhouseHarness]) -> [WheelhouseRemoteSession]? {
+        answer(inOutput: output, harnesses: harnesses)?.sessions
+    }
+
+    /// What the probe's output describes; nil when the output is not the probe's.
+    public static func answer(inOutput output: Data, harnesses: [WheelhouseHarness]) -> WheelhouseRemoteProbeAnswer? {
         guard let reply = try? JSONDecoder().decode(Reply.self, from: output) else { return nil }
         var found: [WheelhouseRemoteSession] = []
         let terminals = Dictionary(grouping: reply.processes, by: \.terminal)
@@ -67,16 +112,21 @@ public enum WheelhouseRemoteSessionProbe {
             let sessionByPid = Dictionary(
                 listed.compactMap { process in process.session.map { (process.pid, $0) } },
                 uniquingKeysWith: { first, _ in first })
+            let roleByPid = Dictionary(
+                listed.compactMap { process in process.role.map { (process.pid, $0) } },
+                uniquingKeysWith: { first, _ in first })
             for agent in WheelhouseHarnessMatch.agents(in: processes, harnesses: harnesses) {
                 guard let session = sessionByPid[agent.process.pid], WheelhouseHarness.isPlainToken(session.id) else {
                     continue
                 }
                 found.append(WheelhouseRemoteSession(
                     id: session.id, harness: agent.harness, terminal: terminal,
-                    directory: agent.process.directory, title: session.title))
+                    directory: agent.process.directory, title: session.title, transcript: session.transcript,
+                    role: roleByPid[agent.process.pid].flatMap { WheelhouseHarness.isPlainToken($0) ? $0 : nil }))
             }
         }
-        return found
+        let files = (reply.files ?? [:]).mapValues { WheelhouseRemoteFile(modifiedAt: $0.modifiedAt, hasNotes: $0.notes) }
+        return WheelhouseRemoteProbeAnswer(sessions: found, home: reply.home, files: files)
     }
 
     /// The command a new terminal on the host runs to open a session again: the harness's
@@ -84,9 +134,24 @@ public enum WheelhouseRemoteSessionProbe {
     /// if typed there, so their own `PATH` and aliases apply. A shell follows it, because a
     /// terminal on a host closes when its command ends.
     public static func resumeArguments(resume: String, directory: String?) -> [String] {
-        var command = resume
-        if let directory, directory.hasPrefix("/") {
-            command = "cd -- " + shellWord(directory) + " && " + resume
+        arguments(running: resume, in: directory, role: nil)
+    }
+
+    /// The command a new terminal on the host runs to start an agent: the harness's start
+    /// command, run like `resumeArguments`, with the agent's role in `roleVariable`. A folder
+    /// may begin with `~/`.
+    public static func startArguments(start: String, directory: String?, role: String?) -> [String] {
+        arguments(running: start, in: directory, role: role)
+    }
+
+    private static func arguments(running line: String, in directory: String?, role: String?) -> [String] {
+        var command = line
+        if let directory, let folder = folderWord(directory) {
+            command = "cd -- " + folder + " && " + command
+        }
+        if let role, WheelhouseHarness.isPlainToken(role) {
+            // Unset again so agents started later from the shell that follows are not taken for it.
+            command = "export \(roleVariable)=\(role); " + command + "; unset \(roleVariable)"
         }
         return [
             "/bin/sh", "-c", "exec \"${SHELL:-/bin/sh}\" -lic \"$1\"", "wheelhouse-resume",
@@ -94,8 +159,23 @@ public enum WheelhouseRemoteSessionProbe {
         ]
     }
 
+    /// A folder on the host as a shell word: absolute, or under the home folder.
+    private static func folderWord(_ directory: String) -> String? {
+        if directory.hasPrefix("/") { return shellWord(directory) }
+        if directory == "~" { return "\"$HOME\"" }
+        if directory.hasPrefix("~/") { return "\"$HOME\"/" + shellWord(String(directory.dropFirst(2))) }
+        return nil
+    }
+
     private struct Reply: Decodable {
         var processes: [Process]
+        var home: String?
+        var files: [String: File]?
+    }
+
+    private struct File: Decodable {
+        var modifiedAt: Double
+        var notes: Bool
     }
 
     private struct Process: Decodable {
@@ -106,22 +186,29 @@ public enum WheelhouseRemoteSessionProbe {
         var startedAt: Double
         var directory: String?
         var terminal: String
+        var role: String?
         var session: Session?
     }
 
     private struct Session: Decodable {
         var id: String
         var title: String?
+        var transcript: String?
     }
 
-    /// The program run on the host. Its second argument is the harness list as base64 JSON;
-    /// a third names a folder to read instead of `/proc`, which the tests use.
+    /// The program run on the host. Its second argument is the harness list as base64 JSON,
+    /// its third the files to report as base64 JSON; a fourth names a folder to read instead
+    /// of `/proc`, which the tests use.
     public static let script = #"""
     import base64, glob, json, os, re, sys
 
     HARNESSES = json.loads(base64.b64decode(sys.argv[2]).decode())
-    PROC = sys.argv[3] if len(sys.argv) > 3 else "/proc"
+    FILES = json.loads(base64.b64decode(sys.argv[3]).decode()) if len(sys.argv) > 3 else []
+    PROC = sys.argv[4] if len(sys.argv) > 4 else "/proc"
     VARIABLE = b"CMUX_TUI_TERMINAL_ID="
+    ROLE = b"WHEELHOUSE_ROLE="
+    # The lines a project memory starts with (WheelhouseProjectAgent.hasNotes).
+    TEMPLATE = ("Kept by the project agent for every agent", "what the next agent needs to start work")
     HEAD = 1024 * 1024
     KNOWN = set(name for harness in HARNESSES for name in (harness.get("process") or []) + (harness.get("launcher") or []))
 
@@ -167,10 +254,12 @@ public enum WheelhouseRemoteSessionProbe {
         for entry in os.listdir(PROC):
             if not entry.isdigit():
                 continue
-            terminal = None
+            terminal, role = None, None
             for item in (read("%s/%s/environ" % (PROC, entry)) or b"").split(b"\0"):
                 if item.startswith(VARIABLE):
                     terminal = item[len(VARIABLE):].decode("utf-8", "replace")
+                elif item.startswith(ROLE):
+                    role = item[len(ROLE):].decode("utf-8", "replace")
             if not terminal:
                 continue
             stat = read("%s/%s/stat" % (PROC, entry)) or b""
@@ -183,7 +272,7 @@ public enum WheelhouseRemoteSessionProbe {
                 part.decode("utf-8", "replace")
                 for part in (read("%s/%s/cmdline" % (PROC, entry)) or b"").split(b"\0")[:2] if part
             ]
-            found.append({
+            process = {
                 "pid": int(entry),
                 "parent": int(after[1]) if len(after) > 1 and after[1].isdigit() else 0,
                 "name": name,
@@ -192,7 +281,10 @@ public enum WheelhouseRemoteSessionProbe {
                 "startedAt": started(entry, boot, ticks),
                 "directory": link("%s/%s/cwd" % (PROC, entry)),
                 "terminal": terminal,
-            })
+            }
+            if role and plain(role):
+                process["role"] = role
+            found.append(process)
         return found
 
 
@@ -310,7 +402,30 @@ public enum WheelhouseRemoteSessionProbe {
         title = first_prompt(path) if path else None
         if title:
             session["title"] = title
+        if path and os.path.isfile(path):
+            session["transcript"] = path
         return session
+
+
+    def has_notes(path):
+        for line in (read(path, HEAD) or b"").decode("utf-8", "replace").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith(TEMPLATE):
+                return True
+        return False
+
+
+    def files():
+        home = os.path.expanduser("~")
+        found = {}
+        for name in FILES:
+            path = os.path.join(home, name)
+            try:
+                changed = os.path.getmtime(path)
+            except OSError:
+                continue
+            found[name] = {"modifiedAt": changed, "notes": has_notes(path)}
+        return found
 
 
     listed = processes()
@@ -319,6 +434,6 @@ public enum WheelhouseRemoteSessionProbe {
         session = look_up(process, harness) if harness else None
         if session:
             process["session"] = session
-    sys.stdout.write(json.dumps({"processes": listed}))
+    sys.stdout.write(json.dumps({"processes": listed, "home": os.path.expanduser("~"), "files": files()}))
     """#
 }

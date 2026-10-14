@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +29,28 @@ const (
 
 func briefPath(home, slug string) string  { return filepath.Join(home, briefDir, slug+".md") }
 func memoryPath(home, slug string) string { return filepath.Join(home, memoryDir, slug+".md") }
+
+// remoteDir is where a project on an SSH host keeps its brief and its memory, under the home
+// folder there. Wheelhouse IDE copies the brief there and the project agent writes the
+// memory there; this machine keeps no copy of it.
+const remoteDir = ".wheelhouse"
+
+// briefPlace is where a brief is read: on this machine (host empty) or on the project's host.
+type briefPlace struct {
+	host          string
+	brief, memory string
+}
+
+func localPlace(home, slug string) briefPlace {
+	return briefPlace{brief: briefPath(home, slug), memory: memoryPath(home, slug)}
+}
+
+// remotePlace is where the agents of a project on host find its files, given the home folder
+// there.
+func remotePlace(host, home, slug string) briefPlace {
+	base := strings.TrimRight(home, "/") + "/" + remoteDir + "/"
+	return briefPlace{host: host, brief: base + briefDir + "/" + slug + ".md", memory: base + memoryDir + "/" + slug + ".md"}
+}
 
 // sessionRecord is one entry of <home>/sessions/<project>.json, which Wheelhouse IDE writes.
 type sessionRecord struct {
@@ -104,7 +128,9 @@ func oneLine(text string, limit int) string {
 	return text
 }
 
-func sessionLine(s sessionRecord, now time.Time) string {
+// sessionLine describes a session for an agent running on host (empty for this machine). A
+// transcript elsewhere is left out: the agent cannot read it.
+func sessionLine(s sessionRecord, host string, now time.Time) string {
 	started := time.Unix(int64(s.StartedAt), 0)
 	parts := []string{started.Format("2006-01-02 15:04"), s.Name}
 	if s.EndedAt > 0 {
@@ -119,15 +145,16 @@ func sessionLine(s sessionRecord, now time.Time) string {
 	if s.Title != "" {
 		line += ": " + oneLine(s.Title, 160)
 	}
-	if s.Transcript != "" {
+	if s.Transcript != "" && s.Host == host {
 		line += "\n  transcript: " + s.Transcript
 	}
 	return line
 }
 
-// renderBrief writes the brief of a project. `since` is when its memory was last written;
-// sessions that ended before it are left out, as the memory has them.
-func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now time.Time) string {
+// renderBrief writes the brief of a project for agents that read it at place. `since` is when
+// its memory was last written; sessions that ended before it are left out, as the memory has
+// them.
+func renderBrief(cfg *config, m *Manifest, place briefPlace, sessions []sessionRecord, since, now time.Time) string {
 	var b strings.Builder
 	line := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
 
@@ -149,7 +176,11 @@ func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now 
 			line("- Folder: %s", folder)
 		}
 	}
-	line("- Project file: %s", m.File)
+	if place.host != "" {
+		line("- Project file: %s, on the user's Mac", m.File)
+	} else {
+		line("- Project file: %s", m.File)
+	}
 
 	line("")
 	line("## Links")
@@ -182,9 +213,12 @@ func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now 
 	line("")
 	line("## Project memory")
 	line("")
-	line("%s", memoryPath(cfg.home, m.Slug))
+	line("%s", place.memory)
 	line("")
 	line("It holds what earlier sessions decided and learned. Read it before anything else.")
+	if place.host != "" {
+		line("It is kept on %s only, where you run.", place.host)
+	}
 
 	line("")
 	line("## If you are the project agent")
@@ -223,7 +257,7 @@ func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now 
 		line("None.")
 	}
 	for _, s := range listed {
-		line("%s", sessionLine(s, now))
+		line("%s", sessionLine(s, place.host, now))
 	}
 
 	line("")
@@ -234,15 +268,22 @@ func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now 
 	line("as in any other session.")
 
 	line("")
-	line("## What you can run")
-	line("")
-	line("- proj lane %s <%s>: move the project's card", m.Slug, laneKeys())
-	line("- proj link %s <kind> <url>: set a link (kinds: %s)", m.Slug, kindTitles(cfg.linkKinds))
-	line("- proj folder %s: open the project's folder as an editor tab", m.Slug)
-	line("- proj ls: every project with its lane")
-	if exe, err := os.Executable(); err == nil {
+	if place.host != "" {
+		line("## The board")
 		line("")
-		line("When proj is not on your PATH, it is %s.", exe)
+		line("The board is on the user's Mac and proj is not on %s. To move the project's card", place.host)
+		line("(the lanes: %s) or set a link, ask the user.", laneKeys())
+	} else {
+		line("## What you can run")
+		line("")
+		line("- proj lane %s <%s>: move the project's card", m.Slug, laneKeys())
+		line("- proj link %s <kind> <url>: set a link (kinds: %s)", m.Slug, kindTitles(cfg.linkKinds))
+		line("- proj folder %s: open the project's folder as an editor tab", m.Slug)
+		line("- proj ls: every project with its lane")
+		if exe, err := os.Executable(); err == nil {
+			line("")
+			line("When proj is not on your PATH, it is %s.", exe)
+		}
 	}
 
 	line("")
@@ -256,34 +297,94 @@ func renderBrief(cfg *config, m *Manifest, sessions []sessionRecord, since, now 
 
 // cmdBrief writes a project's brief, creates its memory file when there is none, and prints
 // where both are and where its agents start.
+//
+// A project on an SSH host keeps both on the host, which proj cannot reach: Wheelhouse IDE
+// passes the home folder there (--remote-home) and when the memory there was last written
+// (--since, Unix seconds; none while it holds only the template). The brief is then written
+// here for the app to copy over, with the host's paths in it, and the memory's template is
+// printed for the app to create the file there.
 func cmdBrief(cfg *config, all []*Manifest, args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: proj brief <project>")
+	const usage = "usage: proj brief <project> [--remote-home <dir> [--since <unix seconds>]]"
+	var project, remoteHome, sinceArg string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--remote-home", "--since":
+			if i+1 == len(args) {
+				return errors.New(usage)
+			}
+			if args[i] == "--remote-home" {
+				remoteHome = args[i+1]
+			} else {
+				sinceArg = args[i+1]
+			}
+			i++
+		default:
+			if project != "" {
+				return errors.New(usage)
+			}
+			project = args[i]
+		}
 	}
-	m, err := findManifest(all, args[0])
+	if project == "" {
+		return errors.New(usage)
+	}
+	m, err := findManifest(all, project)
 	if err != nil {
 		return err
 	}
-	since, err := ensureMemory(cfg.home, m)
-	if err != nil {
+	folders, host := projectFolders(cfg, m)
+	remote := m.Location == locRemote
+	if remote != (remoteHome != "") {
+		if remote {
+			return fmt.Errorf("%s is on an SSH host, where its memory is: pass --remote-home", m.Name)
+		}
+		return fmt.Errorf("%s is on this machine: --remote-home is for a project on an SSH host", m.Name)
+	}
+	if remote && (host == "" || !strings.HasPrefix(remoteHome, "/")) {
+		if host == "" {
+			return errors.New("remote project without a host: set host in the manifest or remote_host in config.yaml")
+		}
+		return errors.New("--remote-home must be an absolute path")
+	}
+	place := localPlace(cfg.home, m.Slug)
+	var since time.Time
+	if remote {
+		place = remotePlace(host, remoteHome, m.Slug)
+		if sinceArg != "" {
+			seconds, err := strconv.ParseInt(sinceArg, 10, 64)
+			if err != nil || seconds < 0 {
+				return errors.New("--since takes Unix seconds")
+			}
+			if seconds > 0 {
+				since = time.Unix(seconds, 0)
+			}
+		}
+	} else if since, err = ensureMemory(cfg.home, m); err != nil {
 		return err
 	}
 	path := briefPath(cfg.home, m.Slug)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	text := renderBrief(cfg, m, loadSessions(cfg.home, m.Slug), since, time.Now())
+	text := renderBrief(cfg, m, place, loadSessions(cfg.home, m.Slug), since, time.Now())
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 		return err
 	}
 	dir := ""
-	if folders, _ := projectFolders(cfg, m); len(folders) > 0 {
+	if len(folders) > 0 {
 		dir = folders[0]
+	} else if remote {
+		dir = cfg.remoteAgentDir
 	}
 	fmt.Printf("name\t%s\n", m.Name)
-	fmt.Printf("brief\t%s\n", path)
-	fmt.Printf("memory\t%s\n", memoryPath(cfg.home, m.Slug))
+	fmt.Printf("brief\t%s\n", place.brief)
+	fmt.Printf("memory\t%s\n", place.memory)
 	fmt.Printf("dir\t%s\n", dir)
+	if remote {
+		fmt.Printf("host\t%s\n", host)
+		fmt.Printf("file\t%s\n", path)
+		fmt.Printf("template\t%s\n", base64.StdEncoding.EncodeToString([]byte(memoryTemplate(m.Name))))
+	}
 	return nil
 }
 

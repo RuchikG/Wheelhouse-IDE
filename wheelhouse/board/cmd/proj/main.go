@@ -31,7 +31,9 @@ const usage = `proj - project workspaces on cmux
   proj rm <project>          take a closed project off the board; its file, its session
                              history and its memory move to <home>/archive
   proj brief <project>       write the project's brief for its agents, create its memory file when
-                             there is none, and print where both are
+                             there is none, and print where both are; a project on an SSH host
+                             keeps both there (~/.wheelhouse), and Wheelhouse IDE passes
+                             --remote-home <dir> [--since <unix seconds>] to brief it
   proj harness               show the harness agents are started on from the Agents panel
   proj harness set [<project>] <harness>
                              set it for every project, or for one project

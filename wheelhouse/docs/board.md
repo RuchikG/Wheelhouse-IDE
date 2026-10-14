@@ -135,9 +135,21 @@ Design:
 
   While the project agent runs, its card on the board carries a wheel that goes to it, and the
   card's menu has **Project Agent**. In a folder a harness has not seen before, its own
-  question whether to trust the folder comes first. Agents are started this way on this Mac
-  only: for a project on an SSH host the panel says so. A project taken off the board takes
-  its memory along to the archive.
+  question whether to trust the folder comes first. A project taken off the board takes its
+  memory along to the archive.
+
+  **On an SSH host** the agents run on the host, each in a new terminal there, and the
+  harness's `start` command has to work on the host. The memory lives on the host only, in
+  `~/.wheelhouse/memory/<project>.md`, and this Mac keeps no copy: the brief is copied to
+  `~/.wheelhouse/briefs/<project>.md` there before every start, **Open** shows the host's file
+  in the editor, and the panel learns when it was written from the host, which it asks every
+  few seconds (this needs `python3` there, as the agent list does). The project agent is
+  started with `WHEELHOUSE_ROLE=project` in its environment, which is how the host tells it
+  apart. On a host the brief lists only the transcripts that are there, and `proj` is not
+  available to the agents, so they ask you to move the card or set a link. Taking such a
+  project off the board leaves its memory on the host. Some harnesses ask before reading files
+  outside the project's folder, so the brief and the memory may each bring a question the
+  first time.
 - **Links are chips on the card,** not tabs that stay open. A project carries one link of each
   kind from a short fixed list (by default a PRD, a tech solution, a tech design, a tracker and a
   pipeline; the list is a setting), and each shows as a named chip on its card. Clicking a chip

@@ -277,19 +277,34 @@ enum WheelhouseSessions {
         panels[project]?[id]
     }
 
+    /// The tab of `workspace` a running session of its project is in, on this Mac or on a host.
+    static func panel(of record: WheelhouseSessionRecord, project: String, in workspace: Workspace) -> UUID? {
+        let panel = panels[project]?[record.id]
+            ?? record.sessionId.flatMap { WheelhouseRemoteSessionScan.panel(ofSession: $0, in: workspace) }
+        return panel.flatMap { workspace.panels[$0] == nil ? nil : $0 }
+    }
+
     static func projectAgentSessions(of project: String) -> (running: WheelhouseSessionRecord?, last: WheelhouseSessionRecord?) {
         history(project).projectAgent
     }
 
     private static func agent(of project: String, in workspace: Workspace, history: WheelhouseSessionHistory) -> WheelhouseProjectAgent {
         let own = history.projectAgent
+        var memoryPath = memoryFile(project).path
+        var writtenAt = memoryWrittenAt[project]
+        if workspace.remoteDisplayTarget != nil {
+            // A project on a host keeps its memory there.
+            let memory = WheelhouseRemoteSessionScan.memory(of: project, in: workspace)
+            memoryPath = memory.path
+            writtenAt = memory.file.flatMap { $0.hasNotes ? $0.modifiedAt : nil }
+        }
         return WheelhouseProjectAgent(
             harness: harnessToStart(for: project),
             harnesses: WheelhouseHarnessScan.all.filter { $0.start?.contains("{prompt}") == true },
             hasOwnHarness: ownHarness[project] != nil,
-            running: own.running, runningPanel: own.running.flatMap { panels[project]?[$0.id] }, last: own.last,
-            memoryPath: memoryFile(project).path, memoryWrittenAt: memoryWrittenAt[project],
-            unavailable: workspace.remoteDisplayTarget == nil ? nil : WheelhouseProjectAgents.remoteNotice)
+            running: own.running, runningPanel: own.running.flatMap { panel(of: $0, project: project, in: workspace) },
+            last: own.last, memoryPath: memoryPath, memoryWrittenAt: writtenAt,
+            unavailable: WheelhouseProjectAgents.hostRefusal(in: workspace))
     }
 
     static func tick() {
@@ -354,16 +369,9 @@ enum WheelhouseSessions {
             // workspace's own, started with the resume command. Typing into a new tab is not
             // a way in, because a host's terminal takes its command when it is created.
             guard workspace.remoteDisplayTarget == host else { return }
-            let focused = workspace.focusedPanelId.map { [$0] } ?? []
-            for panel in focused + workspace.panels.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
-                guard let source = workspace.cloudTerminalSourcePlacement(forPanel: panel), source.machine.isSSH,
-                      let pane = workspace.paneId(forPanelId: panel) else { continue }
-                _ = workspace.routeCloudPaneTerminalCreate(
-                    source: source, sourcePanelID: panel,
-                    destination: .tab(workspaceID: workspace.id, paneID: pane.id.uuidString, index: nil), focus: true,
-                    commandOverride: WheelhouseRemoteSessionProbe.resumeArguments(resume: resume, directory: record.directory))
-                return
-            }
+            _ = WheelhouseRemoteSessionScan.openTerminal(
+                in: workspace,
+                running: WheelhouseRemoteSessionProbe.resumeArguments(resume: resume, directory: record.directory))
             return
         }
         guard let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
@@ -464,7 +472,9 @@ enum WheelhouseSessions {
                     WheelhouseSessionObservation(
                         id: session.id, kind: session.harness.id, name: session.harness.name, sessionId: session.id,
                         title: session.title, host: host, directory: session.directory,
-                        resume: session.harness.resumeCommand(id: session.id))
+                        resume: session.harness.resumeCommand(id: session.id),
+                        role: session.role == WheelhouseProjectAgent.role ? session.role : nil,
+                        transcript: session.transcript)
                 }
                 return (observed, isCurrent, [:])
             case .unavailable:
@@ -567,10 +577,21 @@ enum WheelhouseProjectAgents {
         case agent
     }
 
-    static var remoteNotice: String {
-        String(
-            localized: "wheelhouse.projectAgent.remote",
-            defaultValue: "Agents are started from here on this Mac only; this project is on an SSH host.")
+    /// Why no agent can be started in `workspace` on its host yet, in the user's words; nil on
+    /// this Mac and once the host has answered.
+    static func hostRefusal(in workspace: Workspace) -> String? {
+        guard let host = workspace.remoteDisplayTarget else { return nil }
+        if WheelhouseRemoteSessionScan.isUnreachable(workspace) {
+            return String(
+                localized: "wheelhouse.projectAgent.hostUnreachable",
+                defaultValue: "Agents cannot be started on \(host) from here: Wheelhouse cannot reach it over ssh or run python3 there.")
+        }
+        guard WheelhouseRemoteSessionScan.home(for: workspace) != nil else {
+            return String(
+                localized: "wheelhouse.projectAgent.hostPending",
+                defaultValue: "Waiting for \(host) to answer…")
+        }
+        return nil
     }
 
     /// The tabs the project agent was started in, and the session found in each.
@@ -597,11 +618,10 @@ enum WheelhouseProjectAgents {
         guard let project = WheelhouseSessions.project(of: workspace) else {
             return String(localized: "wheelhouse.projectAgent.noProject", defaultValue: "This workspace is not a project on the board.")
         }
-        guard workspace.remoteDisplayTarget == nil else { return remoteNotice }
+        if let refusal = hostRefusal(in: workspace) { return refusal }
         let running = role == .project
             ? WheelhouseSessions.projectAgentSessions(of: project).running
-                .flatMap { WheelhouseSessions.panel(ofRecord: $0.id, project: project) }
-                .flatMap { workspace.panels[$0] == nil ? nil : $0 }
+                .flatMap { WheelhouseSessions.panel(of: $0, project: project, in: workspace) }
             : nil
         if let running, !update {
             workspace.focusPanel(running)
@@ -615,12 +635,7 @@ enum WheelhouseProjectAgents {
                 defaultValue: "No harness has a start command. Give one a \"start\" line in harnesses.json.")
         }
         Task { @MainActor in
-            let outcome = await WheelhouseProjects.run(["brief", project], home: WheelhouseSessions.home.path)
-            let fields = briefFields(outcome.output)
-            guard outcome.succeeded, let brief = fields["brief"] else {
-                show(failure: outcome.message)
-                return
-            }
+            guard let fields = await brief(project, in: workspace), let brief = fields["brief"] else { return }
             if let running {
                 workspace.focusPanel(running)
                 // The text and Return are sent apart: an agent's editor takes a carriage
@@ -635,10 +650,37 @@ enum WheelhouseProjectAgents {
             let prompt = role == .project
                 ? WheelhouseProjectAgent.Prompt.projectAgent(name: name, brief: brief)
                 : WheelhouseProjectAgent.Prompt.agent(name: name, brief: brief)
-            guard let command = harness.startCommand(prompt: prompt),
-                  let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
-            else { return }
+            guard let command = harness.startCommand(prompt: prompt) else { return }
             var directory = fields["dir"].flatMap { $0.isEmpty ? nil : $0 }
+            if workspace.remoteDisplayTarget != nil {
+                // On a host the role travels with the agent, so the host can tell it apart.
+                var opened: UUID?
+                guard WheelhouseRemoteSessionScan.openTerminal(
+                    in: workspace,
+                    running: WheelhouseRemoteSessionProbe.startArguments(
+                        start: command, directory: directory, role: role == .project ? WheelhouseProjectAgent.role : nil),
+                    opened: { opened = $0 })
+                else {
+                    show(failure: String(
+                        localized: "wheelhouse.projectAgent.noHostTerminal",
+                        defaultValue: "The workspace has no terminal on its host to open a new one next to."))
+                    return
+                }
+                guard role == .project, let panel = opened else { return }
+                // The tab is named once the host has made the terminal, whose own name would
+                // replace an earlier one.
+                for _ in 0..<80 {
+                    guard workspace.panels[panel] != nil else { return }
+                    if SurfaceCatalog.shared.projectionIncludingPendingRestore(forPanel: panel)?.resource != nil { break }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                workspace.setPanelCustomTitle(
+                    panelId: panel, title: String(localized: "wheelhouse.projectAgent.tab", defaultValue: "Project agent"))
+                return
+            }
+            guard let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+            else { return }
             if let path = directory, !FileManager.default.fileExists(atPath: path) { directory = nil }
             guard let panel = workspace.newTerminalSurface(
                 inPane: pane, focus: true, workingDirectory: directory, initialInput: command + "\n"
@@ -657,6 +699,30 @@ enum WheelhouseProjectAgents {
     @discardableResult
     static func openMemory(in workspace: Workspace) -> Bool {
         guard let project = WheelhouseSessions.project(of: workspace) else { return false }
+        if workspace.remoteDisplayTarget != nil {
+            if let refusal = hostRefusal(in: workspace) {
+                show(failure: refusal, title: String(
+                    localized: "wheelhouse.projectAgent.memoryNotOpened", defaultValue: "The project memory was not opened."))
+                return true
+            }
+            Task { @MainActor in
+                var memory = WheelhouseRemoteSessionScan.memory(of: project, in: workspace)
+                if memory.file == nil {
+                    guard let fields = await brief(project, in: workspace), let path = fields["memory"] else { return }
+                    memory.path = path
+                }
+                guard let pane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
+                else { return }
+                if !(await workspace.openRemoteFileInEditor(memory.path, inPane: pane, isCurrent: { true })) {
+                    show(failure: String(
+                        localized: "wheelhouse.projectAgent.memoryNeedsEditor",
+                        defaultValue: "A file on a host opens in the editor, which is off or cannot open it."),
+                        title: String(
+                            localized: "wheelhouse.projectAgent.memoryNotOpened", defaultValue: "The project memory was not opened."))
+                }
+            }
+            return true
+        }
         Task { @MainActor in
             let path = WheelhouseSessions.memoryFile(project).path
             if !FileManager.default.fileExists(atPath: path) {
@@ -673,6 +739,45 @@ enum WheelhouseProjectAgents {
         return true
     }
 
+    /// Writes the project's brief where its agents read it and makes sure its memory exists
+    /// there: on this Mac, or on the workspace's host, where the brief is copied to. Returns
+    /// what `proj brief` printed, with the paths agents use; nil after showing why not.
+    private static func brief(_ project: String, in workspace: Workspace) async -> [String: String]? {
+        var arguments = ["brief", project]
+        let onHost = workspace.remoteDisplayTarget != nil
+        if onHost {
+            guard let home = WheelhouseRemoteSessionScan.home(for: workspace) else {
+                show(failure: hostRefusal(in: workspace) ?? "")
+                return nil
+            }
+            arguments += ["--remote-home", home]
+            if let file = WheelhouseRemoteSessionScan.memory(of: project, in: workspace).file, file.hasNotes {
+                arguments += ["--since", String(Int(file.modifiedAt))]
+            }
+        }
+        let outcome = await WheelhouseProjects.run(arguments, home: WheelhouseSessions.home.path)
+        let fields = briefFields(outcome.output)
+        guard outcome.succeeded, fields["brief"] != nil else {
+            show(failure: outcome.message)
+            return nil
+        }
+        guard onHost else { return fields }
+        guard let brief = fields["brief"], let memory = fields["memory"], let file = fields["file"],
+              let template = fields["template"].flatMap({ Data(base64Encoded: $0) }),
+              let text = try? Data(contentsOf: URL(fileURLWithPath: file)) else {
+            show(failure: outcome.message)
+            return nil
+        }
+        guard await WheelhouseRemoteSessionScan.copy(brief: text, to: brief, memory: memory, template: template, in: workspace)
+        else {
+            show(failure: String(
+                localized: "wheelhouse.projectAgent.copyFailed",
+                defaultValue: "The brief could not be copied to \(workspace.remoteDisplayTarget ?? "the host")."))
+            return nil
+        }
+        return fields
+    }
+
     /// What `proj brief` printed: a name and a value per line, with a tab between them.
     private static func briefFields(_ output: String) -> [String: String] {
         var fields: [String: String] = [:]
@@ -683,10 +788,10 @@ enum WheelhouseProjectAgents {
         return fields
     }
 
-    private static func show(failure message: String) {
+    private static func show(failure message: String, title: String? = nil) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = String(
+        alert.messageText = title ?? String(
             localized: "wheelhouse.projectAgent.failed", defaultValue: "The agent was not started.")
         alert.informativeText = message
         if let window = NSApp.keyWindow ?? NSApp.mainWindow {
@@ -715,6 +820,9 @@ enum WheelhouseRemoteSessionScan {
     private struct Host {
         /// The last answer; nil before the first one.
         var sessions: [WheelhouseRemoteSession]?
+        /// The user's home folder there, and the project memories found, from the last answer.
+        var home: String?
+        var files: [String: WheelhouseRemoteFile] = [:]
         var isCurrent = false
         var hasFailed = false
         var askedAt = Date.distantPast
@@ -741,8 +849,79 @@ enum WheelhouseRemoteSessionScan {
         return terminals(of: workspace)[session.terminal]
     }
 
+    /// Where a project on a host keeps its memory, relative to the home folder there
+    /// (`remoteDir` in wheelhouse/board/cmd/proj/brief.go).
+    static func memoryFile(of project: String) -> String {
+        ".wheelhouse/memory/\(project).md"
+    }
+
+    /// The project's memory on the workspace's host: its path there (under `~` until the host
+    /// has said where its home folder is), and the file when it exists.
+    static func memory(of project: String, in workspace: Workspace) -> (path: String, file: WheelhouseRemoteFile?) {
+        let relative = memoryFile(of: project)
+        let host = destination(of: workspace).flatMap { hosts[$0] }
+        return ((host?.home ?? "~") + "/" + relative, host?.files[relative])
+    }
+
+    /// The user's home folder on the workspace's host, once the host has answered.
+    static func home(for workspace: Workspace) -> String? {
+        destination(of: workspace).flatMap { hosts[$0]?.home }
+    }
+
+    /// Whether the workspace's host has never answered and has stopped being asked often.
+    static func isUnreachable(_ workspace: Workspace) -> Bool {
+        guard let destination = destination(of: workspace), let host = hosts[destination] else { return false }
+        return host.hasFailed && host.sessions == nil
+    }
+
+    /// Opens a new terminal on the workspace's host running `arguments`, next to one of the
+    /// workspace's own there. A host's terminal takes its command when it is created, so
+    /// typing into a new tab is not a way in. Returns false when the workspace has no
+    /// terminal on its host, and gives `opened` the new tab once it is known.
+    @discardableResult
+    static func openTerminal(
+        in workspace: Workspace, running arguments: [String], opened: ((UUID) -> Void)? = nil
+    ) -> Bool {
+        let focused = workspace.focusedPanelId.map { [$0] } ?? []
+        for panel in focused + workspace.panels.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+            guard let source = workspace.cloudTerminalSourcePlacement(forPanel: panel), source.machine.isSSH,
+                  let pane = workspace.paneId(forPanelId: panel) else { continue }
+            let outcome = workspace.routeCloudPaneTerminalCreate(
+                source: source, sourcePanelID: panel,
+                destination: .tab(workspaceID: workspace.id, paneID: pane.id.uuidString, index: nil), focus: true,
+                commandOverride: arguments)
+            if case .created(let terminal) = outcome { opened?(terminal.id) }
+            return true
+        }
+        return false
+    }
+
+    /// Writes a project's brief on the workspace's host at `path`, and its memory at `memory`
+    /// from `template` when there is none, and asks the host again soon. Both paths are
+    /// absolute. False when the host could not be written to.
+    static func copy(brief: Data, to path: String, memory: String, template: Data, in workspace: Workspace) async -> Bool {
+        guard let destination = destination(of: workspace), path.hasPrefix("/"), memory.hasPrefix("/") else { return false }
+        let word = WheelhouseRemoteSessionProbe.shellWord
+        let folder = { (file: String) in word((file as NSString).deletingLastPathComponent) }
+        // Through /bin/sh, whatever the user's login shell is; the files travel base64-encoded.
+        let script = "set -e; umask 077; mkdir -p -- \(folder(path)) \(folder(memory)); "
+            + "printf %s \(brief.base64EncodedString()) | base64 -d > \(word(path)); "
+            + "[ -e \(word(memory)) ] || printf %s \(template.base64EncodedString()) | base64 -d > \(word(memory))"
+        let connection = FilePreviewRemoteFolders.connection(to: destination, from: workspace)
+        guard await run(connection, "exec /bin/sh -c " + word(script)) != nil else { return false }
+        hosts[destination]?.askedAt = .distantPast
+        return true
+    }
+
     /// Asks the hosts of `workspaces` that are due.
     static func refresh(workspaces: [Workspace], harnesses: [WheelhouseHarness]) {
+        // Each host is also asked about the memories of its projects.
+        var files: [String: [String]] = [:]
+        for workspace in workspaces {
+            guard let destination = destination(of: workspace), let project = WheelhouseSessions.project(of: workspace)
+            else { continue }
+            files[destination, default: []].append(memoryFile(of: project))
+        }
         var connected: Set<String> = []
         for workspace in workspaces {
             guard let destination = destination(of: workspace), connected.insert(destination).inserted else { continue }
@@ -753,15 +932,19 @@ enum WheelhouseRemoteSessionScan {
             host.askedAt = Date()
             hosts[destination] = host
             let connection = FilePreviewRemoteFolders.connection(to: destination, from: workspace)
-            let command = WheelhouseRemoteSessionProbe.command(harnesses: harnesses)
+            let command = WheelhouseRemoteSessionProbe.command(harnesses: harnesses, files: files[destination] ?? [])
             Task { @MainActor in
                 let output = await run(connection, command)
-                let sessions = output.flatMap { WheelhouseRemoteSessionProbe.sessions(inOutput: $0, harnesses: harnesses) }
+                let answer = output.flatMap { WheelhouseRemoteSessionProbe.answer(inOutput: $0, harnesses: harnesses) }
                 var host = hosts[destination] ?? Host()
                 host.isAsking = false
-                host.isCurrent = sessions != nil
-                host.hasFailed = sessions == nil
-                if let sessions { host.sessions = sessions }
+                host.isCurrent = answer != nil
+                host.hasFailed = answer == nil
+                if let answer {
+                    host.sessions = answer.sessions
+                    host.home = answer.home ?? host.home
+                    host.files = answer.files
+                }
                 hosts[destination] = host
             }
         }

@@ -53,7 +53,8 @@ DONE              —
   repositories, earlier sessions) and keeps a short memory of what was decided and learned.
   **New agent** starts any other agent with that brief and memory, so it is ready for a task
   without being told the background again. Both are ordinary sessions of your harness in the
-  project's folder: they follow its `CLAUDE.md` or `AGENTS.md` and use your skills.
+  project's folder: they follow its `CLAUDE.md` or `AGENTS.md` and use your skills. For a
+  project on an SSH host they run on the host, and its memory is kept there.
 - **Code editor.** Text files open in [Monaco](https://microsoft.github.io/monaco-editor/), the
   editor from VS Code: syntax highlighting for about 80 languages, multiple cursors, find and
   replace, folding and a minimap.
@@ -191,10 +192,6 @@ The `cmux` command works in the app's terminals as it does in cmux.
 ## Roadmap
 
 What we plan to work on next, roughly in this order within each area.
-
-**Project board**
-
-- Agents started from the panel on SSH hosts; today they start on this Mac only.
 
 **Later**
 

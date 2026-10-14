@@ -76,6 +76,9 @@ func cmdRemove(cfg *config, all []*Manifest, args []string) error {
 	}
 	refreshBoard(cfg, rest)
 	fmt.Printf("removed   %s  (kept as %s)\n", m.Name, tildePath(dst))
+	if _, host := projectFolders(cfg, m); m.Location == locRemote && host != "" {
+		fmt.Printf("note  its memory, if it has one, stays on %s in ~/%s/%s/%s.md\n", host, remoteDir, memoryDir, m.Slug)
+	}
 	if m.Location == locLocal {
 		if dir := filepath.Join(cfg.worktrees, m.Slug); isDir(dir) {
 			fmt.Printf("note  its worktrees stay in %s\n", tildePath(dir))

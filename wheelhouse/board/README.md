@@ -64,7 +64,7 @@ Wheelhouse IDE; click it to open it again. From a terminal that is `proj open <p
 To take a closed project off the board, right-click it under **Closed** and choose **Remove from
 board**, or run `proj rm <project>`. Its file moves to `~/.config/wheelhouse/archive`, together
 with the record of its agent sessions (`<project>.sessions.json`) and its memory
-(`<project>.memory.md`), and nothing reads that
+(`<project>.memory.md`; a project on an SSH host keeps its memory on the host), and nothing reads that
 folder. Worktrees stay where they are; run `proj wt rm <project>` first to remove them. To bring
 a project back, move its file into `projects` again, and its sessions file to
 `sessions/<project>.json`.
@@ -100,7 +100,9 @@ proj lane <project> <design|dev|review|release|done>
 proj lane pull             copy lane moves made on the board back into the project files
 proj rm <project>          take a closed project off the board; its file moves to the archive
 proj brief <project>       write the project's brief for its agents, create its memory file
-                           when there is none, and print where both are
+                           when there is none, and print where both are; for a project on
+                           an SSH host Wheelhouse IDE adds --remote-home <dir> [--since <t>],
+                           as both are kept on the host
 proj harness               the harness agents are started on from the Agents panel
 proj harness set [<project>] <harness>
                            set it for every project, or for one project

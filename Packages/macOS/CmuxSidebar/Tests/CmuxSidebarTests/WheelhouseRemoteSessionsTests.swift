@@ -35,12 +35,13 @@ import Testing
         /// - Parameter terminal: nil for a process that is not in a cmux terminal.
         func process(
             _ pid: Int, parent: Int, command: String, exe: String, arguments: [String],
-            directory: String, terminal: String?, startTicks: Int = 0
+            directory: String, terminal: String?, startTicks: Int = 0, role: String? = nil
         ) throws {
             let folder = proc.appendingPathComponent(String(pid), isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             var environment = ["HOME=/home/someone", "SECRET_TOKEN=do-not-read"]
             if let terminal { environment.append("\(WheelhouseRemoteSessionProbe.terminalVariable)=\(terminal)") }
+            if let role { environment.append("\(WheelhouseRemoteSessionProbe.roleVariable)=\(role)") }
             try Data((environment.joined(separator: "\0") + "\0").utf8).write(to: folder.appendingPathComponent("environ"))
             let rest = ["S", String(parent)] + Array(repeating: "0", count: 17) + [String(startTicks), "0"]
             try Data("\(pid) (\(command)) \(rest.joined(separator: " "))\n".utf8)
@@ -51,11 +52,11 @@ import Testing
         }
     }
 
-    private func probe(_ host: Host, harnesses: [WheelhouseHarness]) throws -> Data {
+    private func probe(_ host: Host, harnesses: [WheelhouseHarness], files: [String] = []) throws -> Data {
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = WheelhouseRemoteSessionProbe.arguments(harnesses: harnesses) + [host.proc.path]
+        process.arguments = WheelhouseRemoteSessionProbe.arguments(harnesses: harnesses, files: files) + [host.proc.path]
         process.environment = ["HOME": host.home.path, "PATH": "/usr/bin:/bin"]
         process.standardOutput = output
         process.standardError = FileHandle.standardError
@@ -92,8 +93,41 @@ import Testing
         #expect(sessions == [
             WheelhouseRemoteSession(
                 id: "0a1b2c3d-1111-2222-3333-444455556666", harness: WheelhouseHarness.builtIn[0], terminal: "term_a",
-                directory: "/srv/app", title: "Fix the cart totals"),
+                directory: "/srv/app", title: "Fix the cart totals",
+                transcript: host.home.path + "/.claude/projects/-srv-app/0a1b2c3d-1111-2222-3333-444455556666.jsonl"),
         ])
+    }
+
+    @Test func tellsTheRoleAnAgentWasStartedIn() throws {
+        let host = try Host()
+        try host.process(10, parent: 1, command: "bash", exe: "/usr/bin/bash", arguments: ["-bash"], directory: "/srv/app", terminal: "term_a")
+        try host.process(
+            11, parent: 10, command: "claude", exe: "/opt/claude/claude", arguments: ["claude"], directory: "/srv/app",
+            terminal: "term_a", role: "project")
+        try host.process(20, parent: 1, command: "bash", exe: "/usr/bin/bash", arguments: ["-bash"], directory: "/srv/app", terminal: "term_b")
+        try host.process(
+            21, parent: 20, command: "claude", exe: "/opt/claude/claude", arguments: ["claude"], directory: "/srv/app",
+            terminal: "term_b", role: "not a token")
+        try host.write(#"{"sessionId": "abc-1"}"#, to: ".claude/sessions/11.json")
+        try host.write(#"{"sessionId": "abc-2"}"#, to: ".claude/sessions/21.json")
+
+        let sessions = try #require(WheelhouseRemoteSessionProbe.sessions(inOutput: try probe(host, harnesses: harnesses), harnesses: harnesses))
+        #expect(sessions.map(\.id) == ["abc-1", "abc-2"])
+        #expect(sessions.map(\.role) == ["project", nil])
+    }
+
+    @Test func reportsTheHomeFolderAndTheFilesAskedAbout() throws {
+        let host = try Host()
+        try host.write("# Cart: project memory\n\nKept by the project agent for every agent that works on this project. Keep it short:\nwhat the next agent needs to start work without asking.\n\n## Open\n", to: ".wheelhouse/memory/cart.md")
+        try host.write("# Shop: project memory\n\n## Where it stands\n\nIn review.\n", to: ".wheelhouse/memory/shop.md")
+
+        let output = try probe(host, harnesses: harnesses, files: [".wheelhouse/memory/cart.md", ".wheelhouse/memory/shop.md", ".wheelhouse/memory/none.md"])
+        let answer = try #require(WheelhouseRemoteSessionProbe.answer(inOutput: output, harnesses: harnesses))
+        #expect(answer.home == host.home.path)
+        #expect(answer.files.keys.sorted() == [".wheelhouse/memory/cart.md", ".wheelhouse/memory/shop.md"])
+        #expect(answer.files[".wheelhouse/memory/cart.md"]?.hasNotes == false)
+        #expect(answer.files[".wheelhouse/memory/shop.md"]?.hasNotes == true)
+        #expect((answer.files[".wheelhouse/memory/shop.md"]?.modifiedAt ?? 0) > Date().timeIntervalSince1970 - 60)
     }
 
     @Test func anAgentStartedByALauncherCountsAsTheLaunchers() throws {
@@ -134,7 +168,9 @@ import Testing
         #expect(sessions == [
             WheelhouseRemoteSession(
                 id: "99999999-2222-3333-4444-555555555555", harness: WheelhouseHarness.builtIn[1], terminal: "term_c",
-                directory: "/srv/api", title: "Add a health check"),
+                directory: "/srv/api", title: "Add a health check",
+                transcript: host.home.path
+                    + "/.codex/sessions/2026/01/02/rollout-2026-01-02T03-04-06-99999999-2222-3333-4444-555555555555.jsonl"),
         ])
     }
 
@@ -188,6 +224,34 @@ import Testing
         let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
         #expect(printed.hasSuffix("\(folder.lastPathComponent)|a b|"))
+    }
+
+    @Test func startsInARoleAndAFolderUnderTheHomeFolder() throws {
+        let shell = #"exec "${SHELL:-/bin/sh}" -l"#
+        let started = WheelhouseRemoteSessionProbe.startArguments(
+            start: "claude 'New agent'", directory: "~/work/it's", role: "project")
+        #expect(started.last == #"export WHEELHOUSE_ROLE=project; cd -- "$HOME"/'work/it'\''s' && claude 'New agent'; unset WHEELHOUSE_ROLE; "# + shell)
+        #expect(WheelhouseRemoteSessionProbe.startArguments(start: "codex", directory: "~", role: "bad role").last
+            == #"cd -- "$HOME" && codex; "# + shell)
+
+        // Run for real: the role reaches the command and not the shell that follows.
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("home \(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home.appendingPathComponent("work"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let arguments = WheelhouseRemoteSessionProbe.startArguments(
+            start: #"printf '%s|' "$PWD" "$WHEELHOUSE_ROLE""#, directory: "~/work", role: "project")
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: arguments[0])
+        process.arguments = Array(arguments.dropFirst())
+        process.environment = ["SHELL": "/bin/sh", "PATH": "/usr/bin:/bin", "HOME": home.path]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        #expect(printed.hasSuffix("/work|project|"))
     }
 
     @Test func quotesTheProbeCommandForTheRemoteShell() {

@@ -23,7 +23,7 @@ func briefManifest(t *testing.T, cfg *config) *Manifest {
 func TestBriefNamesTheProjectItsMemoryAndTheRules(t *testing.T) {
 	cfg := testConfig(t)
 	m := briefManifest(t, cfg)
-	text := renderBrief(cfg, m, nil, time.Time{}, time.Unix(1_800_000_000, 0))
+	text := renderBrief(cfg, m, localPlace(cfg.home, m.Slug), nil, time.Time{}, time.Unix(1_800_000_000, 0))
 	for _, want := range []string{
 		"# Refunds: project brief",
 		"- Lane: Dev (",
@@ -56,7 +56,7 @@ func TestBriefListsOnlySessionsTheMemoryHasNotTakenIn(t *testing.T) {
 		{Name: "Codex", Title: "Still going", StartedAt: at(3), Host: "build-box"},
 		{Name: "Codex", Title: "The project agent itself", StartedAt: at(1), EndedAt: at(0.5), Role: "project"},
 	}
-	text := renderBrief(cfg, m, sessions, since, now)
+	text := renderBrief(cfg, m, localPlace(cfg.home, m.Slug), sessions, since, now)
 	if strings.Contains(text, "Before the memory") || strings.Contains(text, "The project agent itself") {
 		t.Errorf("a session the memory has is listed:\n%s", text)
 	}
@@ -161,5 +161,71 @@ func TestArchiveTakesTheMemoryAlongAndDropsTheBrief(t *testing.T) {
 	}
 	if _, err := os.Stat(briefPath(cfg.home, "refunds")); !os.IsNotExist(err) {
 		t.Errorf("the brief is still there: %v", err)
+	}
+}
+
+func TestBriefForAHostNamesThePathsThereAndOnlyTheTranscriptsThere(t *testing.T) {
+	cfg := testConfig(t)
+	m := briefManifest(t, cfg)
+	now := time.Unix(1_800_000_000, 0)
+	at := func(hoursAgo float64) float64 { return float64(now.Unix()) - hoursAgo*3600 }
+	sessions := []sessionRecord{
+		{Name: "Claude Code", Title: "On the Mac", StartedAt: at(2), EndedAt: at(1), Transcript: "/Users/me/t.jsonl"},
+		{Name: "Codex", Title: "On the host", StartedAt: at(3), EndedAt: at(2), Host: "devbox", Transcript: "/home/me/t.jsonl"},
+	}
+	text := renderBrief(cfg, m, remotePlace("devbox", "/home/me/", "refunds"), sessions, time.Time{}, now)
+	for _, want := range []string{
+		"/home/me/.wheelhouse/memory/refunds.md\n",
+		"It is kept on devbox only",
+		"On the Mac",
+		"on devbox: On the host\n  transcript: /home/me/t.jsonl",
+		"## The board",
+		"proj is not on devbox",
+		"refunds.yaml, on the user's Mac",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the brief lacks %q:\n%s", want, text)
+		}
+	}
+	for _, unwanted := range []string{"/Users/me/t.jsonl", "proj lane refunds", memoryPath(cfg.home, "refunds")} {
+		if strings.Contains(text, unwanted) {
+			t.Errorf("the brief has %q:\n%s", unwanted, text)
+		}
+	}
+}
+
+func TestBriefOfAProjectOnAHostLeavesThisMachinesMemoryAlone(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.remoteAgentDir = "~/work"
+	path := filepath.Join(cfg.home, "projects", "cart.yaml")
+	writeFile(t, path, "name: Cart\nlane: dev\nlocation: remote\nhost: devbox\n")
+	m, err := loadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := []*Manifest{m}
+	if err := cmdBrief(cfg, all, []string{"cart"}); err == nil {
+		t.Error("a project on a host was briefed without the home folder there")
+	}
+	if err := cmdBrief(cfg, all, []string{"cart", "--remote-home", "home/me"}); err == nil {
+		t.Error("a relative home folder was accepted")
+	}
+	if err := cmdBrief(cfg, all, []string{"cart", "--remote-home", "/home/me", "--since", "soon"}); err == nil {
+		t.Error("a --since that is no number was accepted")
+	}
+	if err := cmdBrief(cfg, all, []string{"cart", "--remote-home", "/home/me", "--since", "1800000000"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(memoryPath(cfg.home, "cart")); !os.IsNotExist(err) {
+		t.Errorf("a memory was made on this machine: %v", err)
+	}
+	if got := readFile(t, briefPath(cfg.home, "cart")); !strings.Contains(got, "/home/me/.wheelhouse/memory/cart.md") ||
+		!strings.Contains(got, "## Sessions since the memory was written (") {
+		t.Errorf("the brief copied to the host:\n%s", got)
+	}
+
+	local := briefManifest(t, cfg)
+	if err := cmdBrief(cfg, []*Manifest{local}, []string{"refunds", "--remote-home", "/home/me"}); err == nil {
+		t.Error("a project on this machine was briefed for a host")
 	}
 }
