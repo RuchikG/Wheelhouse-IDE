@@ -24,6 +24,8 @@ const OPEN_LINE = tone("#00735F99", "#5EE0C299");
 // Cards, chips and buttons sit on the sidebar's glass.
 const CARD = tone("#0000000f", "#7f7f7f14");
 const CARD_SELECTED = tone("#00000024", "#7f7f7f3d");
+// The selected project's outline, drawn over any fill so it shows on a card waiting on you too.
+const SELECTED_LINE = tone("#0A6CDB", "#0A84FF");
 const CARD_HOVER = tone("#0000001a", "#7f7f7f33");
 const CHIP = tone("#00000014", "#7f7f7f29");
 const CHIP_LINE = tone("#00000033", "#7f7f7f4d");
@@ -389,6 +391,7 @@ function card(w) {
     .paddingHorizontal(10).paddingVertical(7)
     .cornerRadius(8)
     .background(() => (hot() ? NEEDS_CARD : w()?.selected ? CARD_SELECTED : CARD))
+    .borderColor(() => (w()?.selected ? SELECTED_LINE : null)).borderWidth(2.5)
     .hoverBackground(() => (hot() ? NEEDS_CARD_HOVER : CARD_HOVER))
     .frame({ maxWidth: "infinity" })
     .onTap(() => jump(w()))
@@ -534,6 +537,7 @@ function otherRow(w) {
     .paddingHorizontal(10).paddingVertical(4)
     .cornerRadius(6)
     .background(() => (w()?.selected ? CARD_SELECTED : null))
+    .borderColor(() => (w()?.selected ? SELECTED_LINE : null)).borderWidth(2.5)
     .hoverBackground(ROW_HOVER)
     .frame({ maxWidth: "infinity" })
     .onTap(() => jump(w()))
