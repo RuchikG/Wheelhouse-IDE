@@ -34,8 +34,8 @@ DONE              —
 
 - **Project board.** A kanban board in the sidebar: one card per project, in lanes from Design to
   Done. A card shows its branch and pull request, how many agents are running and how many are
-  waiting on you, and links to the project's documents. Click a card to jump into its workspace;
-  drag it to another lane as the work moves on.
+  waiting on you, and links to the project's documents. The selected project's card has a blue
+  outline. Click a card to jump into its workspace; drag it to another lane as the work moves on.
   The links open in the app's browser, and one button copies your sign-ins from Chrome so that
   they open signed in.
 - **Many agents per project.** The board's Agents view lists every agent across your projects
