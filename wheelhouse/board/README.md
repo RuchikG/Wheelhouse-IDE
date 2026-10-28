@@ -72,7 +72,8 @@ a project back, move its file into `projects` again, and its sessions file to
 The installed board is a copy of `sidebars/projects-board.js` with each project's links written
 into it, because a custom sidebar cannot read files. `proj open`, `proj adopt` and `proj link`
 rewrite it; run `proj sync` after editing a project file's links by hand, the settings, or the
-board script itself.
+board script itself. Wheelhouse IDE also rewrites it at launch when the board came from the app's
+own script, so a new version's board shows after the update.
 
 `proj` drives whichever cmux `CMUX_BIN` names (default: `cmux` on `PATH`, else the installed app).
 Inside a Wheelhouse IDE terminal that is the app itself. From any other terminal, point it at a

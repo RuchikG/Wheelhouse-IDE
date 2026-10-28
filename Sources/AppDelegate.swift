@@ -1678,7 +1678,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        WheelhouseProjects.setUpBoardOnFirstLaunch()
+        WheelhouseProjects.setUpBoardAtLaunch()
         WheelhouseAgentsPanel.start()
         // Start the one browser-availability watcher before any gated view or
         // menu mounts: it is lazy, and its consumers only observe its
